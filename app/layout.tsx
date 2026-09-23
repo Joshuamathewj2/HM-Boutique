@@ -11,7 +11,7 @@ const poppins = Poppins({
 });
 
 export const viewport: Viewport = {
-  themeColor: "#3F3F46",
+  themeColor: "#35617C",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -19,13 +19,13 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "RAJA MOBILES - POS",
-  description: "RAJA MOBILES Billing, Inventory & Digital Invoices",
+  title: "SS CREATIVES - POS",
+  description: "SS CREATIVES Billing, Inventory & Digital Invoices",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "RAJA MOBILES",
+    title: "SS CREATIVES",
   },
   icons: {
     icon: "/logo.jpeg",
@@ -47,7 +47,7 @@ export default function RootLayout({
         <link rel="manifest" href="/manifest.json" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="RAJA MOBILES" />
+        <meta name="apple-mobile-web-app-title" content="SS CREATIVES" />
         <link rel="apple-touch-icon" href="/logo.jpeg" />
       </head>
       <body className="min-h-full flex flex-col">

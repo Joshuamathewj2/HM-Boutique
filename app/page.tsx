@@ -2,19 +2,19 @@ import { MapPin, Clock, Phone, Store, Smartphone, Camera, Mail } from "lucide-re
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-[#FFFFFF] text-[#1A1A1A] font-sans flex flex-col justify-between selection:bg-[#3F3F46] selection:text-white">
+    <div className="min-h-screen bg-[#FFFFFF] text-[#1A1A1A] font-sans flex flex-col justify-between selection:bg-[#35617C] selection:text-white">
       {/* Header */}
       <header className="border-b border-black/10 py-6 px-6 sm:px-12 flex justify-center items-center bg-white/90 backdrop-blur-md sticky top-0 z-40">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-xs p-1 border border-[#3F3F46]/30">
-            <img src="/logo.jpeg" alt="RAJA MOBILES Logo" className="w-full h-full object-contain" />
+          <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-xs p-1 border border-[#35617C]/30">
+            <img src="/logo.jpeg" alt="SS Creatives Logo" className="w-full h-full object-contain" />
           </div>
           <div>
-            <span className="text-sm font-black text-[#3F3F46] tracking-wider uppercase block">
-              RAJA MOBILES
+            <span className="text-sm font-black text-[#35617C] tracking-wider uppercase block">
+              SS CREATIVES
             </span>
-            <span className="text-[9px] text-[#52525B] font-bold tracking-widest block uppercase -mt-0.5">
-              Naidumangalam
+            <span className="text-[9px] text-[#7C5A52] font-bold tracking-widest block uppercase -mt-0.5">
+              The Design Spot
             </span>
           </div>
         </div>
@@ -22,83 +22,83 @@ export default function Home() {
 
       {/* Main Info */}
       <main className="flex-1 max-w-xl mx-auto w-full px-6 flex flex-col justify-center items-center py-16">
-        <div className="bg-white border border-[#3F3F46]/30 rounded-2xl p-8 sm:p-12 shadow-md w-full text-center relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-[#3F3F46] via-[#52525B] to-[#3F3F46]" />
+        <div className="bg-white border border-[#35617C]/30 rounded-2xl p-8 sm:p-12 shadow-md w-full text-center relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-[#35617C] via-[#7C5A52] to-[#35617C]" />
 
-          <span className="inline-block px-3 py-1 bg-[#3F3F46]/10 border border-[#3F3F46]/30 text-[#3F3F46] text-[10px] font-bold rounded-full tracking-wider uppercase mb-6">
+          <span className="inline-block px-3 py-1 bg-[#35617C]/10 border border-[#35617C]/30 text-[#35617C] text-[10px] font-bold rounded-full tracking-wider uppercase mb-6">
             Store Directory & Contacts
           </span>
 
-          <h1 className="text-3xl font-black text-[#3F3F46] leading-tight tracking-tight mb-2">
-            RAJA MOBILES
+          <h1 className="text-3xl font-black text-[#35617C] leading-tight tracking-tight mb-2">
+            SS CREATIVES
           </h1>
-          <p className="text-xs text-[#52525B] font-black tracking-widest uppercase mb-8">
-            Mobiles • Accessories • Recharges • Repairs
+          <p className="text-xs text-[#7C5A52] font-black tracking-widest uppercase mb-8">
+            Tailoring • Designer Wear • Alterations • Embroidery
           </p>
 
           <div className="space-y-6 text-left max-w-md mx-auto text-sm font-semibold text-[#1A1A1A]/80 border-t border-black/10 pt-8">
             <div className="flex items-start gap-4">
-              <Smartphone className="w-5 h-5 text-[#3F3F46] shrink-0 mt-0.5" />
+              <Smartphone className="w-5 h-5 text-[#35617C] shrink-0 mt-0.5" />
               <div>
                 <p className="text-[10px] font-bold text-black/50 uppercase tracking-wider mb-0.5">What We Offer</p>
                 <p className="text-[#1A1A1A] leading-relaxed">
-                  Latest Smartphones • Chargers & Cables • Cases & Screen Guards • Earbuds & Audio • Power Banks • Mobile Recharges • Accessories
+                  Custom Tailoring • Designer Blouses & Dresses • Alterations & Fittings • Embroidery & Aari Work • Boutique Wear
                 </p>
               </div>
             </div>
 
             <div className="flex items-start gap-4">
-              <Store className="w-5 h-5 text-[#3F3F46] shrink-0 mt-0.5" />
+              <Store className="w-5 h-5 text-[#35617C] shrink-0 mt-0.5" />
               <div>
                 <p className="text-[10px] font-bold text-black/50 uppercase tracking-wider mb-0.5">Location</p>
                 <p className="text-[#1A1A1A] font-bold">
-                  Naidumangalam, Tiruvannamalai District, Tamil Nadu
+                  Tiruchendur, Thoothukudi District, Tamil Nadu
                 </p>
               </div>
             </div>
 
             <div className="flex items-start gap-4">
-              <MapPin className="w-5 h-5 text-[#3F3F46] shrink-0 mt-0.5" />
+              <MapPin className="w-5 h-5 text-[#35617C] shrink-0 mt-0.5" />
               <div>
                 <p className="text-[10px] font-bold text-black/50 uppercase tracking-wider mb-0.5">Address</p>
                 <p className="text-[#1A1A1A] leading-relaxed">
-                  No. 37/2, CC Road, Naidumangalam, Tiruvannamalai District - 606802
+                  55/6, Melaratha Veethi, Tiruchendur - 628215
                 </p>
               </div>
             </div>
 
             <div className="flex items-start gap-4">
-              <Phone className="w-5 h-5 text-[#3F3F46] shrink-0 mt-0.5" />
+              <Phone className="w-5 h-5 text-[#35617C] shrink-0 mt-0.5" />
               <div>
                 <p className="text-[10px] font-bold text-black/50 uppercase tracking-wider mb-0.5">Phone Numbers</p>
                 <p className="text-[#1A1A1A]">
-                  97870143403 / 7010141698
+                  8807299918
                 </p>
               </div>
             </div>
 
             <div className="flex items-start gap-4">
-              <Mail className="w-5 h-5 text-[#3F3F46] shrink-0 mt-0.5" />
+              <Mail className="w-5 h-5 text-[#35617C] shrink-0 mt-0.5" />
               <div>
                 <p className="text-[10px] font-bold text-black/50 uppercase tracking-wider mb-0.5">Email</p>
-                <p className="text-[#1A1A1A]">
-                  rajamobilestvm@gmail.com
+                <p className="text-[#1A1A1A]/40 italic">
+                  —
                 </p>
               </div>
             </div>
 
             <div className="flex items-start gap-4">
-              <Camera className="w-5 h-5 text-[#3F3F46] shrink-0 mt-0.5" />
+              <Camera className="w-5 h-5 text-[#35617C] shrink-0 mt-0.5" />
               <div>
                 <p className="text-[10px] font-bold text-black/50 uppercase tracking-wider mb-0.5">Instagram</p>
-                <p className="text-[#1A1A1A]">
-                  @raja_mobiles_offcial
+                <p className="text-[#1A1A1A]/40 italic">
+                  —
                 </p>
               </div>
             </div>
 
             <div className="flex items-start gap-4">
-              <Clock className="w-5 h-5 text-[#3F3F46] shrink-0 mt-0.5" />
+              <Clock className="w-5 h-5 text-[#35617C] shrink-0 mt-0.5" />
               <div>
                 <p className="text-[10px] font-bold text-black/50 uppercase tracking-wider mb-0.5">Business Hours</p>
                 <p className="text-[#1A1A1A]">
@@ -112,8 +112,8 @@ export default function Home() {
 
       {/* Footer */}
       <footer className="border-t border-black/10 py-6 text-center bg-white">
-        <p className="text-[10px] font-bold text-[#3F3F46] tracking-widest uppercase">
-          RAJA MOBILES • Naidumangalam
+        <p className="text-[10px] font-bold text-[#35617C] tracking-widest uppercase">
+          SS CREATIVES • The Design Spot
         </p>
         <p className="text-[9px] font-semibold text-black/40 uppercase tracking-wider mt-1">
           © {new Date().getFullYear()} All Rights Reserved • Powered by Cenexa Systems

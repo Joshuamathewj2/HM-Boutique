@@ -3,7 +3,7 @@ import {
   Product,
   ProductBatch,
   ProductWithBatches,
-  ProductUnit,
+  StockMovement,
   Category,
   Customer,
   OrderRow,
@@ -27,12 +27,11 @@ const uid = () => {
 };
 
 // Builds a ProductWithBatches, computing stock and active price.
-// For serialized products (tracks_serial), available stock = count of AVAILABLE
-// units; for accessories it's the sum of batch stock_quantity (legacy behavior).
+// Stock is the sum of remaining batch quantities (FIFO); the active selling
+// price comes from the oldest batch that still has stock.
 function enrichProduct(
   product: Product,
   batches: ProductBatch[],
-  units: ProductUnit[],
 ): ProductWithBatches {
   let active_selling_price = 0;
   let foundActiveBatch = false;
@@ -46,14 +45,10 @@ function enrichProduct(
     }
   }
 
-  const available_units = units.filter((u) => u.status === 'AVAILABLE');
-  const total_stock = product.tracks_serial ? available_units.length : batchStock;
-
   return {
     ...product,
     batches,
-    available_units,
-    total_stock,
+    total_stock: batchStock,
     active_selling_price,
   };
 }
@@ -90,39 +85,33 @@ export const dbStore = {
     const products = await sql`SELECT * FROM products WHERE id = ${id}`;
     if (products.length === 0) return null;
 
-    const [batches, units] = await Promise.all([
-      sql`SELECT * FROM product_batches WHERE product_id = ${id} ORDER BY arrived_at ASC`,
-      sql`SELECT * FROM product_units WHERE product_id = ${id} ORDER BY created_at ASC`,
-    ]);
+    const batches = await sql`SELECT * FROM product_batches WHERE product_id = ${id} ORDER BY arrived_at ASC`;
 
     return enrichProduct(
       products[0] as Product,
       batches as ProductBatch[],
-      units as ProductUnit[],
     );
   },
 
   async listProductsWithBatches(): Promise<ProductWithBatches[]> {
-    const [products, allBatches, allUnits] = await Promise.all([
+    const [products, allBatches] = await Promise.all([
       sql`SELECT * FROM products ORDER BY name ASC`,
       sql`SELECT * FROM product_batches ORDER BY arrived_at ASC`,
-      sql`SELECT * FROM product_units ORDER BY created_at ASC`,
     ]);
 
     return products.map((p: any) =>
       enrichProduct(
         p as Product,
         (allBatches as ProductBatch[]).filter((b) => b.product_id === p.id),
-        (allUnits as ProductUnit[]).filter((u) => u.product_id === p.id),
       ),
     );
   },
 
-  async addProduct(input: { name: string; description: string | null; category: string; gst_rate: number; low_stock_threshold: number; tracks_serial?: boolean }): Promise<Product> {
+  async addProduct(input: { name: string; description: string | null; category: string; gst_rate: number; low_stock_threshold: number }): Promise<Product> {
     const id = uid();
     const rows = await sql`
-      INSERT INTO products (id, name, description, category, gst_rate, low_stock_threshold, tracks_serial)
-      VALUES (${id}, ${input.name}, ${input.description}, ${input.category}, ${input.gst_rate}, ${input.low_stock_threshold}, ${input.tracks_serial ?? false})
+      INSERT INTO products (id, name, description, category, gst_rate, low_stock_threshold)
+      VALUES (${id}, ${input.name}, ${input.description}, ${input.category}, ${input.gst_rate}, ${input.low_stock_threshold})
       RETURNING *
     `;
     return rows[0] as Product;
@@ -137,7 +126,6 @@ export const dbStore = {
     if (patch.category !== undefined) await sql`UPDATE products SET category = ${patch.category} WHERE id = ${id}`;
     if (patch.gst_rate !== undefined) await sql`UPDATE products SET gst_rate = ${patch.gst_rate} WHERE id = ${id}`;
     if (patch.low_stock_threshold !== undefined) await sql`UPDATE products SET low_stock_threshold = ${patch.low_stock_threshold} WHERE id = ${id}`;
-    if (patch.tracks_serial !== undefined) await sql`UPDATE products SET tracks_serial = ${patch.tracks_serial} WHERE id = ${id}`;
 
     const rows = await sql`SELECT * FROM products WHERE id = ${id}`;
     return rows.length > 0 ? (rows[0] as Product) : null;
@@ -152,39 +140,46 @@ export const dbStore = {
     product_id: string;
     batch_no: string | null;
     manufacturer: string | null;
+    supplier_name?: string | null;
+    supplier_phone?: string | null;
+    supplier_invoice_no?: string | null;
+    supplier_invoice_date?: string | null;
     hsn_code: string | null;
     cost_price: number;
     selling_price: number;
     stock_quantity: number;
-    // For serialized products: one IMEI/serial per physical unit. When provided,
-    // stock_quantity is forced to serials.length and a product_units row is created per serial.
-    serials?: string[];
   }): Promise<ProductBatch> {
     const id = uid();
-    const serials = (input.serials || [])
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
-    const stockQty = serials.length > 0 ? serials.length : input.stock_quantity;
+    const stockQty = Math.max(0, Math.trunc(Number(input.stock_quantity) || 0));
 
     const rows = await sql`
       INSERT INTO product_batches (
-        id, product_id, batch_no, manufacturer, hsn_code, cost_price, selling_price, stock_quantity
+        id, product_id, batch_no, manufacturer,
+        supplier_name, supplier_phone, supplier_invoice_no, supplier_invoice_date,
+        hsn_code, cost_price, selling_price, stock_quantity
       ) VALUES (
-        ${id}, ${input.product_id}, ${input.batch_no}, ${input.manufacturer}, ${input.hsn_code},
-        ${input.cost_price}, ${input.selling_price}, ${stockQty}
+        ${id}, ${input.product_id}, ${input.batch_no}, ${input.manufacturer},
+        ${input.supplier_name ?? null}, ${input.supplier_phone ?? null},
+        ${input.supplier_invoice_no ?? null}, ${input.supplier_invoice_date ?? null},
+        ${input.hsn_code}, ${input.cost_price}, ${input.selling_price}, ${stockQty}
       )
       RETURNING *
     `;
 
-    if (serials.length > 0) {
-      await Promise.all(
-        serials.map((serial) =>
-          sql`
-            INSERT INTO product_units (id, product_id, batch_id, serial, status)
-            VALUES (${uid()}, ${input.product_id}, ${id}, ${serial}, 'AVAILABLE')
-          `,
-        ),
-      );
+    // Log the incoming stock as an IN movement for the stock report.
+    if (stockQty > 0) {
+      const nameRows = await sql`SELECT name FROM products WHERE id = ${input.product_id}`;
+      const snapshotName = (nameRows[0] as { name?: string })?.name ?? '';
+      await sql`
+        INSERT INTO stock_movements (
+          id, product_id, batch_id, order_id, movement_type, quantity,
+          unit_cost, snapshot_name, supplier_name, reason
+        ) VALUES (
+          ${uid()}, ${input.product_id}, ${id}, NULL, 'IN', ${stockQty},
+          ${input.cost_price}, ${snapshotName}, ${input.supplier_name ?? null},
+          ${input.batch_no ? `Batch ${input.batch_no}` : null}
+        )
+      `;
     }
 
     return rows[0] as ProductBatch;
@@ -195,6 +190,10 @@ export const dbStore = {
 
     if (patch.batch_no !== undefined) await sql`UPDATE product_batches SET batch_no = ${patch.batch_no} WHERE id = ${id}`;
     if (patch.manufacturer !== undefined) await sql`UPDATE product_batches SET manufacturer = ${patch.manufacturer} WHERE id = ${id}`;
+    if (patch.supplier_name !== undefined) await sql`UPDATE product_batches SET supplier_name = ${patch.supplier_name} WHERE id = ${id}`;
+    if (patch.supplier_phone !== undefined) await sql`UPDATE product_batches SET supplier_phone = ${patch.supplier_phone} WHERE id = ${id}`;
+    if (patch.supplier_invoice_no !== undefined) await sql`UPDATE product_batches SET supplier_invoice_no = ${patch.supplier_invoice_no} WHERE id = ${id}`;
+    if (patch.supplier_invoice_date !== undefined) await sql`UPDATE product_batches SET supplier_invoice_date = ${patch.supplier_invoice_date} WHERE id = ${id}`;
     if (patch.hsn_code !== undefined) await sql`UPDATE product_batches SET hsn_code = ${patch.hsn_code} WHERE id = ${id}`;
     if (patch.cost_price !== undefined) await sql`UPDATE product_batches SET cost_price = ${patch.cost_price} WHERE id = ${id}`;
     if (patch.selling_price !== undefined) await sql`UPDATE product_batches SET selling_price = ${patch.selling_price} WHERE id = ${id}`;
@@ -208,63 +207,13 @@ export const dbStore = {
     await sql`DELETE FROM product_batches WHERE id = ${id}`;
   },
 
-  // PRODUCT UNITS (individual IMEI / serial rows)
-  async listUnits(productId: string): Promise<ProductUnit[]> {
+  // STOCK MOVEMENTS (downloadable stock report ledger)
+  async listStockMovements(): Promise<StockMovement[]> {
     const rows = await sql`
-      SELECT * FROM product_units
-      WHERE product_id = ${productId}
-      ORDER BY status ASC, created_at ASC
+      SELECT * FROM stock_movements
+      ORDER BY moved_at DESC, created_at DESC
     `;
-    return rows as ProductUnit[];
-  },
-
-  // Rename/correct the serial on an AVAILABLE unit. Sold units are locked (on an invoice).
-  async updateUnitSerial(id: string, serial: string): Promise<ProductUnit | null> {
-    const rows = await sql`
-      UPDATE product_units
-      SET serial = ${serial}
-      WHERE id = ${id} AND status = 'AVAILABLE'
-      RETURNING *
-    `;
-    return rows.length > 0 ? (rows[0] as ProductUnit) : null;
-  },
-
-  // Remove an AVAILABLE unit and drop its batch stock by one. Sold units cannot be deleted.
-  async deleteUnit(id: string): Promise<{ deleted: boolean; reason?: string }> {
-    const rows = await sql`SELECT status, batch_id FROM product_units WHERE id = ${id}`;
-    if (rows.length === 0) return { deleted: false, reason: 'not_found' };
-    const unit = rows[0] as { status: string; batch_id: string };
-    if (unit.status === 'SOLD') return { deleted: false, reason: 'sold' };
-
-    await sql`UPDATE product_batches SET stock_quantity = GREATEST(0, stock_quantity - 1) WHERE id = ${unit.batch_id}`;
-    await sql`DELETE FROM product_units WHERE id = ${id}`;
-    return { deleted: true };
-  },
-
-  // Add new serials to an existing batch (top-up), skipping any that already exist for the product.
-  async addUnitsToBatch(batchId: string, productId: string, serials: string[]): Promise<number> {
-    const clean = Array.from(
-      new Set(serials.map((s) => s.trim()).filter((s) => s.length > 0)),
-    );
-    if (clean.length === 0) return 0;
-
-    const existing = await sql`
-      SELECT serial FROM product_units WHERE product_id = ${productId} AND serial = ANY(${clean})
-    `;
-    const taken = new Set((existing as { serial: string }[]).map((r) => r.serial));
-    const toAdd = clean.filter((s) => !taken.has(s));
-    if (toAdd.length === 0) return 0;
-
-    await Promise.all(
-      toAdd.map((serial) =>
-        sql`
-          INSERT INTO product_units (id, product_id, batch_id, serial, status)
-          VALUES (${uid()}, ${productId}, ${batchId}, ${serial}, 'AVAILABLE')
-        `,
-      ),
-    );
-    await sql`UPDATE product_batches SET stock_quantity = stock_quantity + ${toAdd.length} WHERE id = ${batchId}`;
-    return toAdd.length;
+    return rows as StockMovement[];
   },
 
   // CUSTOMERS
@@ -325,20 +274,8 @@ export const dbStore = {
   },
 
   async deleteOrder(id: string): Promise<void> {
-    // Return any serialized units sold on this order back to stock before deleting.
-    const soldUnits = await sql`
-      SELECT id, batch_id FROM product_units WHERE order_id = ${id}
-    `;
-    await Promise.all(
-      (soldUnits as { id: string; batch_id: string }[]).map((u) =>
-        sql`UPDATE product_batches SET stock_quantity = stock_quantity + 1 WHERE id = ${u.batch_id}`,
-      ),
-    );
-    await sql`
-      UPDATE product_units
-      SET status = 'AVAILABLE', order_id = NULL, sold_at = NULL
-      WHERE order_id = ${id}
-    `;
+    // The order's OUT stock movements are kept as an audit trail; their order_id
+    // is set to NULL automatically via ON DELETE SET NULL.
     await sql`DELETE FROM orders WHERE id = ${id}`;
   },
 
@@ -441,35 +378,23 @@ export const dbStore = {
     const batchList = [...(allBatches as ProductBatch[])];
     const finalOrderItems: Omit<OrderItemRow, 'id'>[] = [];
     const batchUpdates: { id: string; deduction: number }[] = [];
-    const unitsToSell: string[] = []; // product_units ids to mark SOLD
+    // OUT stock movements to log for the stock report (one per batch consumed).
+    const outMovements: {
+      product_id: string;
+      batch_id: string;
+      quantity: number;
+      unit_cost: number;
+      snapshot_name: string;
+    }[] = [];
 
     for (const item of payload.items) {
-      // Serialized unit sale: the cart line already points at one specific unit.
-      if (item.unit_id) {
-        unitsToSell.push(item.unit_id);
-        if (item.batch_id) batchUpdates.push({ id: item.batch_id, deduction: 1 });
-        finalOrderItems.push({
-          order_id: payload.orderId,
-          product_id: item.product_id,
-          batch_id: item.batch_id ?? null,
-          unit_id: item.unit_id,
-          snapshot_name: item.name,
-          snapshot_price: item.price,
-          snapshot_serial: item.serial ?? null,
-          quantity: 1,
-        });
-        continue;
-      }
-
       if (!item.product_id) {
         finalOrderItems.push({
           order_id: payload.orderId,
           product_id: null,
           batch_id: null,
-          unit_id: null,
           snapshot_name: item.name,
           snapshot_price: item.price,
-          snapshot_serial: null,
           quantity: item.qty,
         });
         continue;
@@ -485,15 +410,20 @@ export const dbStore = {
         const take = Math.min(remaining, batch.stock_quantity);
         batch.stock_quantity -= take;
         batchUpdates.push({ id: batch.id, deduction: take });
+        outMovements.push({
+          product_id: item.product_id,
+          batch_id: batch.id,
+          quantity: take,
+          unit_cost: Number(batch.cost_price) || 0,
+          snapshot_name: item.name,
+        });
 
         finalOrderItems.push({
           order_id: payload.orderId,
           product_id: item.product_id,
           batch_id: batch.id,
-          unit_id: null,
           snapshot_name: item.name,
           snapshot_price: Number(batch.selling_price),
-          snapshot_serial: null,
           quantity: take,
         });
 
@@ -505,10 +435,8 @@ export const dbStore = {
           order_id: payload.orderId,
           product_id: item.product_id,
           batch_id: null,
-          unit_id: null,
           snapshot_name: item.name,
           snapshot_price: item.price,
-          snapshot_serial: null,
           quantity: remaining,
         });
       }
@@ -539,24 +467,28 @@ export const dbStore = {
       ),
     ]);
 
-    // Insert order items and mark sold serialized units concurrently.
+    // Insert order items and log OUT stock movements concurrently.
     // Both reference the order row, which the previous await has already inserted.
     await Promise.all([
       ...finalOrderItems.map((oi) =>
         sql`
           INSERT INTO order_items (
-            id, order_id, product_id, batch_id, unit_id, snapshot_name, snapshot_price, snapshot_serial, quantity
+            id, order_id, product_id, batch_id, snapshot_name, snapshot_price, quantity
           ) VALUES (
-            ${uid()}, ${oi.order_id}, ${oi.product_id}, ${oi.batch_id}, ${oi.unit_id},
-            ${oi.snapshot_name}, ${oi.snapshot_price}, ${oi.snapshot_serial}, ${oi.quantity}
+            ${uid()}, ${oi.order_id}, ${oi.product_id}, ${oi.batch_id},
+            ${oi.snapshot_name}, ${oi.snapshot_price}, ${oi.quantity}
           )
         `
       ),
-      ...unitsToSell.map((unitId) =>
+      ...outMovements.map((m) =>
         sql`
-          UPDATE product_units
-          SET status = 'SOLD', order_id = ${payload.orderId}, sold_at = now()
-          WHERE id = ${unitId} AND status = 'AVAILABLE'
+          INSERT INTO stock_movements (
+            id, product_id, batch_id, order_id, movement_type, quantity,
+            unit_cost, snapshot_name, supplier_name, reason, moved_at
+          ) VALUES (
+            ${uid()}, ${m.product_id}, ${m.batch_id}, ${payload.orderId}, 'OUT', ${m.quantity},
+            ${m.unit_cost}, ${m.snapshot_name}, NULL, ${'Sale ' + payload.orderId}, ${payload.billDate}
+          )
         `
       ),
     ]);
@@ -695,8 +627,6 @@ export const dbStore = {
       id: it.id,
       product_id: it.product_id,
       batch_id: null,
-      unit_id: null,
-      serial: null,
       name: it.snapshot_name,
       desc: it.snapshot_desc || '',
       price: Number(it.snapshot_price),

@@ -1,6 +1,6 @@
-# RAJA MOBILES — POS & Inventory Billing System
+# SS CREATIVES — POS & Inventory Billing System
 
-A PWA-enabled Point of Sale (POS), billing, and inventory management system for **RAJA MOBILES**, Naidumangalam. It handles quick invoice generation, WhatsApp delivery of digital receipts, order history, GST / non-GST billing with two revenue dashboards, and stock management with low-stock alerts.
+A PWA-enabled Point of Sale (POS), billing, and inventory management system for **SS CREATIVES**, Tiruchendur. It handles quick invoice generation, WhatsApp delivery of digital receipts, order history, GST / non-GST billing with two revenue dashboards, and stock management with low-stock alerts.
 
 ## Features
 
@@ -110,6 +110,6 @@ The role is determined by which passcode is used to log in.
 
 ## License
 
-© 2026 RAJA MOBILES. All Rights Reserved.
+© 2026 SS CREATIVES. All Rights Reserved.
 
 Powered by [Cenexa Systems](https://www.cenexasystems.com/).

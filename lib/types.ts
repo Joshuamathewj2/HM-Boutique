@@ -11,19 +11,6 @@ export type Product = {
   category: string;
   gst_rate: number; // Default GST % for this product (editable at billing)
   low_stock_threshold: number;
-  tracks_serial: boolean; // true = each unit has an IMEI / serial (phones, laptops); false = accessories
-  created_at: string;
-};
-
-// One physical unit of a serialized product (IMEI / serial number).
-export type ProductUnit = {
-  id: string;
-  product_id: string;
-  batch_id: string;
-  serial: string;
-  status: 'AVAILABLE' | 'SOLD';
-  order_id: string | null;
-  sold_at: string | null;
   created_at: string;
 };
 
@@ -31,7 +18,11 @@ export type ProductBatch = {
   id: string;
   product_id: string;
   batch_no: string | null;
-  manufacturer: string | null; // Brand / supplier
+  manufacturer: string | null; // Brand / make of the product
+  supplier_name: string | null; // Vendor this lot was bought from
+  supplier_phone: string | null; // Vendor contact (optional)
+  supplier_invoice_no: string | null; // Vendor's bill / invoice number
+  supplier_invoice_date: string | null; // Date on the vendor's bill
   hsn_code: string | null;
   cost_price: number;
   selling_price: number;
@@ -43,8 +34,24 @@ export type ProductWithBatches = Product & {
   batches: ProductBatch[];
   total_stock: number;
   active_selling_price: number;
-  // For serialized products: the units still available to sell (status = AVAILABLE).
-  available_units: ProductUnit[];
+};
+
+// One row in the stock movement ledger (downloadable stock report).
+export type StockMovementType = 'IN' | 'OUT' | 'ADJUST';
+
+export type StockMovement = {
+  id: string;
+  product_id: string;
+  batch_id: string | null;
+  order_id: string | null;
+  movement_type: StockMovementType;
+  quantity: number;
+  unit_cost: number;
+  snapshot_name: string;
+  supplier_name: string | null;
+  reason: string | null;
+  moved_at: string;
+  created_at: string;
 };
 
 export type Customer = {
@@ -82,10 +89,8 @@ export type OrderItemRow = {
   order_id: string;
   product_id: string | null;
   batch_id: string | null;
-  unit_id: string | null;
   snapshot_name: string;
   snapshot_price: number;
-  snapshot_serial: string | null; // IMEI / serial sold, frozen at time of sale
   quantity: number;
 };
 
@@ -146,8 +151,6 @@ export type CartItem = {
   id: string;
   product_id: string | null;
   batch_id: string | null;
-  unit_id?: string | null; // specific serialized unit being sold (if any)
-  serial?: string | null; // its IMEI / serial, for snapshotting
   name: string;
   desc: string;
   price: number;

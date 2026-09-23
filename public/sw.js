@@ -1,10 +1,10 @@
-const CACHE_NAME = 'raja-mobiles-pos-v1';
+const CACHE_NAME = 'ss-creatives-pos-v1';
 const ASSETS_TO_CACHE = [
   '/',
   '/manifest.json',
   '/logo.png',
   '/icon.png',
-  '/pos/admin/secure/control-panel/raja-mobiles'
+  '/pos/admin/secure/control-panel/ss-creatives'
 ];
 
 self.addEventListener('install', (event) => {

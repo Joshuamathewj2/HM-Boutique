@@ -1,11 +1,11 @@
 {
-  "name": "RAJA MOBILES - POS",
-  "short_name": "RAJA MOBILES",
-  "description": "RAJA MOBILES Point of Sale, Billing & Inventory Management",
-  "start_url": "/pos/admin/secure/control-panel/raja-mobiles",
+  "name": "SS CREATIVES - POS",
+  "short_name": "SS CREATIVES",
+  "description": "SS CREATIVES Point of Sale, Billing & Inventory Management",
+  "start_url": "/pos/admin/secure/control-panel/ss-creatives",
   "display": "standalone",
   "background_color": "#FFFFFF",
-  "theme_color": "#3F3F46",
+  "theme_color": "#35617C",
   "orientation": "any",
   "scope": "/",
   "icons": [

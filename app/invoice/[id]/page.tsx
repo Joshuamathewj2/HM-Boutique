@@ -111,7 +111,7 @@ export default async function InvoicePage({
           The requested invoice identifier #{id} could not be found.
         </p>
         <Link
-          href="/pos/admin/secure/control-panel/raja-mobiles"
+          href="/pos/admin/secure/control-panel/ss-creatives"
           className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 rounded-md text-white font-medium text-xs transition-colors"
         >
           <ArrowLeft className="w-3.5 h-3.5" /> Back to Dashboard
@@ -201,23 +201,22 @@ export default async function InvoicePage({
             <div className="w-14 h-14 sm:w-16 sm:h-16 shrink-0 rounded-sm border border-zinc-200 overflow-hidden bg-white p-1">
               <img
                 src="/logo.jpeg"
-                alt="RAJA MOBILES"
+                alt="SS Creatives"
                 className="w-full h-full object-contain"
               />
             </div>
             <div className="space-y-1">
               <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-zinc-900">
-                RAJA MOBILES
+                SS CREATIVES
               </h1>
               <p className="text-xs text-zinc-500 leading-relaxed max-w-xs">
-                CC Road, Naidumangalam, Tiruvannamalai, Tamil Nadu - 606802
+                55/6, Melaratha Veethi, Tiruchendur, Tamil Nadu - 628215
               </p>
               <div className="text-xs text-zinc-600 pt-1 space-y-0.5">
-                <p>Phone: +91 97870 14340, +91 70101 41698</p>
-                <p>Email: rajamobilestvm@gmail.com</p>
+                <p>Phone: +91 88072 99918</p>
                 {order.is_gst && (
                   <p className="text-zinc-800 font-medium pt-0.5">
-                    GSTIN: <span className="font-mono">33AEEPI4975G1ZI</span> • State Code: 33
+                    GSTIN: <span className="font-mono">—</span> • State Code: 33
                   </p>
                 )}
               </div>
@@ -318,11 +317,6 @@ export default async function InvoicePage({
                       <div className="font-medium text-zinc-900">
                         {item.snapshot_name}
                       </div>
-                      {item.snapshot_serial && (
-                        <div className="text-[11px] font-mono text-zinc-500 mt-0.5">
-                          IMEI/SN: {item.snapshot_serial}
-                        </div>
-                      )}
                     </td>
                     {order.is_gst && (
                       <td className="py-3 text-center font-mono text-zinc-500">
@@ -388,7 +382,7 @@ export default async function InvoicePage({
             <div className="text-[11px] text-zinc-500 leading-relaxed pt-2">
               <p className="font-medium text-zinc-700 mb-0.5">Terms & Notes:</p>
               <p>• Goods once sold can only be exchanged within 7 days with this invoice.</p>
-              <p>• Brand manufacturer warranty applies to phones and accessories.</p>
+              <p>• Custom-stitched and altered garments are made to order and are non-returnable.</p>
             </div>
           </div>
 
@@ -462,7 +456,7 @@ export default async function InvoicePage({
         {/* Signatory & Machine Note */}
         <div className="mt-12 pt-6 border-t border-zinc-200 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-6 text-xs">
           <div className="text-[11px] text-zinc-400">
-            Thank you for your visit! • Raja Mobiles POS
+            Thank you for your visit! • SS Creatives POS
           </div>
 
           <div className="sm:text-right space-y-1 self-end">
@@ -470,7 +464,7 @@ export default async function InvoicePage({
             <div className="font-semibold text-zinc-800 text-xs">
               Authorised Signatory
             </div>
-            <div className="text-[10px] text-zinc-400">For Raja Mobiles</div>
+            <div className="text-[10px] text-zinc-400">For SS Creatives</div>
           </div>
         </div>
       </div>
