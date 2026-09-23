@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   User,
   Receipt,
@@ -35,10 +35,8 @@ import {
   Lock,
   Pencil,
   Boxes,
-  AlertTriangle,
   Smartphone,
   Check,
-  PackageX,
   Wallet,
   TrendingDown,
   Coins,
@@ -69,7 +67,6 @@ import {
   removeExpense,
   fetchCategories,
   createCategory,
-  fetchStockMovements,
   fetchAdvanceOrders,
   createAdvanceOrder,
   cancelAdvanceOrder,
@@ -147,8 +144,6 @@ type CatalogItem = {
   category?: string;
   price?: number;
   gstRate?: number;
-  stockQuantity?: number;
-  lowStockThreshold?: number;
   batchNo?: string;
   manufacturer?: string;
   hsnCode?: string;
@@ -334,43 +329,26 @@ const SearchableItemInput = ({
             {filteredCatalog.length > 0 ? (
               <ul className="py-1" ref={listRef}>
                 {filteredCatalog.map((catItem, idx) => {
-                  const isOutOfStock = catItem.stockQuantity === 0;
                   return (
                     <li
                       key={catItem.id}
-                      className={`px-5 py-3 border-b border-transparent last:border-0 transition-colors ${
-                        isOutOfStock
-                          ? "opacity-50 cursor-not-allowed"
-                          : "cursor-pointer"
-                      } ${idx === selectedIndex && !isOutOfStock ? "bg-[#FFFFFF] border-l-4 border-l-[#35617C]" : !isOutOfStock ? "hover:bg-[#FFFFFF] border-l-4 border-l-transparent" : "border-l-4 border-l-transparent"}`}
+                      className={`px-5 py-3 border-b border-transparent last:border-0 transition-colors cursor-pointer ${idx === selectedIndex ? "bg-[#FFFFFF] border-l-4 border-l-[#35617C]" : "hover:bg-[#FFFFFF] border-l-4 border-l-transparent"}`}
                       onMouseDown={(e) => {
                         e.preventDefault();
-                        if (isOutOfStock) return;
                         selectItem(catItem);
                       }}
                       onTouchStart={(e) => {
                         e.preventDefault();
-                        if (isOutOfStock) return;
                         selectItem(catItem);
                       }}
                       onClick={() => {
-                        if (isOutOfStock) return;
                         selectItem(catItem);
                       }}
-                      onMouseEnter={() =>
-                        !isOutOfStock && setSelectedIndex(idx)
-                      }
+                      onMouseEnter={() => setSelectedIndex(idx)}
                     >
                       <div className="flex justify-between items-center">
                         <div className="text-sm font-bold text-[#000000]">
                           {catItem.name}
-                        </div>
-                        <div
-                          className={`text-[10px] font-bold ${isOutOfStock ? "text-[#27272A]" : "text-green-600"}`}
-                        >
-                          {isOutOfStock
-                            ? "Out of Stock"
-                            : `Stock: ${catItem.stockQuantity}`}
                         </div>
                       </div>
                       {catItem.desc && (
@@ -404,7 +382,7 @@ export default function POSBilling() {
 
   const [activeCategory, setActiveCategory] = useState<string>("ALL");
   const [activeTab, setActiveTab] = useState<
-    "billing" | "orders" | "analytics" | "inventory" | "alerts" | "expenses" | "advance"
+    "billing" | "orders" | "analytics" | "inventory" | "expenses" | "advance"
   >("billing");
   const [isOnline, setIsOnline] = useState(false);
   const [customerName, setCustomerName] = useState("");
@@ -457,8 +435,6 @@ export default function POSBilling() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Modal States
-  const [showLowStockAlertModal, setShowLowStockAlertModal] = useState<boolean>(false);
-  const [lowStockAlertProducts, setLowStockAlertProducts] = useState<CatalogItem[]>([]);
 
 
   // Analytics filter/navigation states
@@ -513,7 +489,7 @@ export default function POSBilling() {
   const [expenseSortOrder, setExpenseSortOrder] = useState<"asc" | "desc">("desc");
 
   const [inventorySortField, setInventorySortField] = useState<
-    "name" | "price" | "gst" | "stock" | "brand"
+    "name" | "price" | "gst" | "brand"
   >("name");
   const [inventorySortOrder, setInventorySortOrder] = useState<"asc" | "desc">("asc");
 
@@ -587,7 +563,6 @@ export default function POSBilling() {
 
   const productToCatalogItem = (p: ProductWithBatches): CatalogItem => {
     const activeBatch =
-      p.batches?.find((b: any) => b.stock_quantity > 0) ||
       (p.batches && p.batches.length > 0 ? p.batches[0] : null);
 
     return {
@@ -596,10 +571,13 @@ export default function POSBilling() {
       name: p.name,
       desc: p.description || undefined,
       category: p.category || undefined,
-      price: Number(p.active_selling_price) || 0,
+      // Catalog is a pure price list — price comes from the batch selling price
+      // (no stock dependency, so items always price correctly at billing).
+      price:
+        Number(p.active_selling_price) ||
+        Number(activeBatch?.selling_price) ||
+        0,
       gstRate: Number(p.gst_rate) || 0,
-      stockQuantity: Number(p.total_stock) || 0,
-      lowStockThreshold: Number(p.low_stock_threshold) || 0,
       batches: p.batches,
       batchNo: activeBatch?.batch_no || undefined,
       manufacturer: activeBatch?.manufacturer || undefined,
@@ -706,8 +684,6 @@ export default function POSBilling() {
   const [newCatPrice, setNewCatPrice] = useState<number | "">("");
   const [newCatCostPrice, setNewCatCostPrice] = useState<number | "">("");
   const [newCatGst, setNewCatGst] = useState<number | "">(18);
-  const [newCatStock, setNewCatStock] = useState<number | "">("");
-  const [newCatThreshold, setNewCatThreshold] = useState<number | "">(5);
   const [newCatBatch, setNewCatBatch] = useState<string>("");
   const [newCatManufacturer, setNewCatManufacturer] = useState<string>("");
   const [newCatHsn, setNewCatHsn] = useState<string>("");
@@ -720,7 +696,6 @@ export default function POSBilling() {
 
   const [isSavingCatalog, setIsSavingCatalog] = useState<boolean>(false); // guards Save Product / Save Batch against double-clicks
   const [inventorySearch, setInventorySearch] = useState<string>("");
-  const [alertedIds, setAlertedIds] = useState<Set<string>>(new Set());
   const [expandedProductId, setExpandedProductId] = useState<string | null>(
     null,
   );
@@ -826,25 +801,7 @@ export default function POSBilling() {
     setItems((prev) =>
       prev.map((item) => {
         if (item.id !== id) return item;
-        let finalQty = Math.max(1, newQty);
-        // Find catalog item by product_id OR by exact/case-insensitive name
-        const catItem = catalog.find(
-          (c) =>
-            (item.product_id &&
-              (c.id === item.product_id || c.productId === item.product_id)) ||
-            (item.name &&
-              c.name.trim().toLowerCase() === item.name.trim().toLowerCase()),
-        );
-        if (catItem && typeof catItem.stockQuantity === "number") {
-          if (newQty > catItem.stockQuantity) {
-            alert(
-              `Cannot add more than available stock (${catItem.stockQuantity}) for "${catItem.name}"`,
-            );
-            finalQty = catItem.stockQuantity;
-          } else {
-            finalQty = newQty;
-          }
-        }
+        const finalQty = Math.max(1, newQty);
         return { ...item, qty: finalQty };
       }),
     );
@@ -863,8 +820,6 @@ export default function POSBilling() {
     setNewCatPrice("");
     setNewCatCostPrice("");
     setNewCatGst(18);
-    setNewCatStock("");
-    setNewCatThreshold(5);
     setNewCatBatch("");
     setNewCatManufacturer("");
     setNewCatHsn("");
@@ -881,14 +836,6 @@ export default function POSBilling() {
     setNewCatDesc(catItem.desc || "");
     setNewCatPrice(catItem.price ?? "");
     setNewCatGst(typeof catItem.gstRate === "number" ? catItem.gstRate : 18);
-    setNewCatStock(
-      typeof catItem.stockQuantity === "number" ? catItem.stockQuantity : "",
-    );
-    setNewCatThreshold(
-      typeof catItem.lowStockThreshold === "number"
-        ? catItem.lowStockThreshold
-        : 5,
-    );
     setNewCatBatch(catItem.batchNo || "");
     setNewCatManufacturer(catItem.manufacturer || "");
     setNewCatHsn(catItem.hsnCode || "");
@@ -930,7 +877,8 @@ export default function POSBilling() {
       description: newCatDesc || null,
       category: newCatCategory.trim() || "General",
       gst_rate: newCatGst === "" ? 0 : Number(newCatGst),
-      low_stock_threshold: newCatThreshold === "" ? 5 : Number(newCatThreshold),
+      // Catalog is stock-less — quantity tracking removed.
+      low_stock_threshold: 0,
     };
 
     // Vendor / supplier details shared by the batch payloads below.
@@ -976,7 +924,7 @@ export default function POSBilling() {
           hsn_code: newCatHsn || null,
           cost_price: newCatCostPrice === "" ? 0 : Number(newCatCostPrice),
           selling_price: newCatPrice === "" ? 0 : Number(newCatPrice),
-          stock_quantity: newCatStock === "" ? 0 : Number(newCatStock),
+          stock_quantity: 0,
           ...supplierFields,
         });
 
@@ -991,7 +939,6 @@ export default function POSBilling() {
                   ...c,
                   name: data.name,
                   desc: data.description || undefined,
-                  lowStockThreshold: data.low_stock_threshold,
                   gstRate: Number(data.gst_rate) || 0,
                 }
               : c,
@@ -1016,7 +963,7 @@ export default function POSBilling() {
         hsn_code: newCatHsn || null,
         cost_price: newCatCostPrice === "" ? 0 : Number(newCatCostPrice),
         selling_price: newCatPrice === "" ? 0 : Number(newCatPrice),
-        stock_quantity: newCatStock === "" ? 0 : Number(newCatStock),
+        stock_quantity: 0,
         ...supplierFields,
       };
 
@@ -1033,13 +980,12 @@ export default function POSBilling() {
 
       if (catalogTargetRowId) {
         updateItem(catalogTargetRowId, "name", data.name);
-        if (data.active_selling_price !== undefined) {
-          updateItem(
-            catalogTargetRowId,
-            "price",
-            data.active_selling_price || 0,
-          );
-        }
+        updateItem(
+          catalogTargetRowId,
+          "price",
+          Number(data.active_selling_price) ||
+            (newCatPrice === "" ? 0 : Number(newCatPrice)),
+        );
         setCatalogTargetRowId(null);
       }
 
@@ -1062,7 +1008,7 @@ export default function POSBilling() {
         hsn_code: newCatHsn || null,
         cost_price: newCatCostPrice === "" ? 0 : Number(newCatCostPrice),
         selling_price: newCatPrice === "" ? 0 : Number(newCatPrice),
-        stock_quantity: newCatStock === "" ? 0 : Number(newCatStock),
+        stock_quantity: 0,
         supplier_name: newCatSupplierName.trim() || null,
         supplier_phone: newCatSupplierPhone.trim() || null,
         supplier_invoice_no: newCatSupplierInvoiceNo.trim() || null,
@@ -1461,23 +1407,6 @@ export default function POSBilling() {
       // Instantly update orders history and open the completed receipt banner
       setOrders((prev) => [mappedOrder, ...prev]);
       setCompletedBillData(mappedOrder as any);
-
-      // Optimistically deduct inventory quantities locally for immediate UI response
-      setCatalog((prev) =>
-        prev.map((catItem) => {
-          const soldItem = itemsToSave.find((i) => i.product_id === catItem.id);
-          if (soldItem) {
-            return {
-              ...catItem,
-              stockQuantity: Math.max(
-                0,
-                (catItem.stockQuantity ?? 0) - soldItem.qty,
-              ),
-            };
-          }
-          return catItem;
-        }),
-      );
 
       // Non-blocking sync with backend database in the background
       fetchProducts()
@@ -2132,15 +2061,8 @@ export default function POSBilling() {
     analyticsGstFilter,
   ]);
 
-  // Inventory-derived data: low stock alerts
+  // Inventory-derived data (pure catalog — stock tracking removed).
   const inventoryProducts = catalog.filter((c) => !c.id.startsWith("default-"));
-
-  const lowStockItems = inventoryProducts.filter((c) => {
-    const threshold =
-      typeof c.lowStockThreshold === "number" ? c.lowStockThreshold : 5;
-    const stock = typeof c.stockQuantity === "number" ? c.stockQuantity : 0;
-    return stock <= threshold;
-  });
 
   const filteredInventory = inventoryProducts
     .filter((p) => {
@@ -2162,8 +2084,6 @@ export default function POSBilling() {
         comparison = (a.price ?? 0) - (b.price ?? 0);
       } else if (inventorySortField === "gst") {
         comparison = (a.gstRate ?? 0) - (b.gstRate ?? 0);
-      } else if (inventorySortField === "stock") {
-        comparison = (a.stockQuantity ?? 0) - (b.stockQuantity ?? 0);
       } else if (inventorySortField === "brand") {
         comparison = (a.manufacturer || a.batchNo || "").localeCompare(
           b.manufacturer || b.batchNo || "",
@@ -2171,156 +2091,6 @@ export default function POSBilling() {
       }
       return inventorySortOrder === "asc" ? comparison : -comparison;
     });
-
-  // Products with a stock problem (out of stock or at/below threshold) — used to
-  // raise the stock alarm proactively.
-  const stockProblemItems = inventoryProducts.filter((c) => {
-    const threshold =
-      typeof c.lowStockThreshold === "number" ? c.lowStockThreshold : 5;
-    const stock = typeof c.stockQuantity === "number" ? c.stockQuantity : 0;
-    return stock <= threshold;
-  });
-  const outOfStockCount = stockProblemItems.filter(
-    (c) => (typeof c.stockQuantity === "number" ? c.stockQuantity : 0) <= 0,
-  ).length;
-
-  const lowStockKey = lowStockItems
-    .map((c) => c.id)
-    .sort()
-    .join("|");
-
-  // One shared AudioContext for the whole session. Browsers block audio until
-  // the user interacts with the page and start the context "suspended", so we
-  // keep a single context around and resume it — otherwise the modal that
-  // auto-pops on the billing/home tab would stay silent (no fresh click before
-  // it fires), while the Alerts tab worked only because clicking the tab is
-  // itself the unlocking gesture.
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const getAudioContext = useCallback((): AudioContext | null => {
-    if (typeof window === "undefined") return null;
-    const AudioCtx =
-      (window as unknown as { AudioContext?: typeof AudioContext })
-        .AudioContext ||
-      (window as unknown as { webkitAudioContext?: typeof AudioContext })
-        .webkitAudioContext;
-    if (!AudioCtx) return null;
-    if (!audioCtxRef.current) {
-      audioCtxRef.current = new AudioCtx();
-    }
-    return audioCtxRef.current;
-  }, []);
-
-  // Plays the three-tone stock-alarm chime. Extracted so both the initial
-  // "new low-stock item" beep and the repeating alarm-clock loop can reuse it.
-  const playStockAlertBeep = useCallback(() => {
-    try {
-      const ctx = getAudioContext();
-      if (!ctx) return;
-      // If the browser left it suspended (autoplay policy), try to resume; once
-      // a user gesture has happened this succeeds and stays running.
-      if (ctx.state === "suspended") void ctx.resume();
-      const now = ctx.currentTime;
-      [0, 0.18, 0.36].forEach((offset) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = "square";
-        osc.frequency.setValueAtTime(880, now + offset);
-        gain.gain.setValueAtTime(0.001, now + offset);
-        gain.gain.exponentialRampToValueAtTime(0.15, now + offset + 0.01);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.14);
-        osc.connect(gain).connect(ctx.destination);
-        osc.start(now + offset);
-        osc.stop(now + offset + 0.16);
-      });
-    } catch (err) {
-      console.warn("Alert beep failed:", err);
-    }
-  }, [getAudioContext]);
-
-  // Unlock audio on the very first user interaction anywhere on the page, so
-  // alarms triggered automatically afterwards (the stock modal on load) are
-  // actually audible. Listeners stay attached so audio re-unlocks if the
-  // context is ever re-suspended (e.g. after the tab is backgrounded).
-  useEffect(() => {
-    const unlock = () => {
-      const ctx = getAudioContext();
-      if (ctx && ctx.state === "suspended") void ctx.resume();
-    };
-    window.addEventListener("pointerdown", unlock);
-    window.addEventListener("keydown", unlock);
-    window.addEventListener("touchstart", unlock);
-    return () => {
-      window.removeEventListener("pointerdown", unlock);
-      window.removeEventListener("keydown", unlock);
-      window.removeEventListener("touchstart", unlock);
-    };
-  }, [getAudioContext]);
-
-  // Surface the stock alarm automatically once, right after inventory loads,
-  // so out-of-stock / low-stock items are never missed even if the operator
-  // never opens the Alerts tab.
-  const initialStockAlertShownRef = useRef(false);
-  useEffect(() => {
-    if (initialStockAlertShownRef.current) return;
-    if (!isAuthorized || catalog.length === 0) return;
-    initialStockAlertShownRef.current = true;
-    if (stockProblemItems.length > 0) {
-      setLowStockAlertProducts(lowStockItems);
-      setShowLowStockAlertModal(true);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthorized, catalog.length]);
-
-  useEffect(() => {
-    if (!isAuthorized || lowStockItems.length === 0) return;
-    const currentIds = lowStockItems.map((c) => c.id);
-    const hasNew = currentIds.some((id) => !alertedIds.has(id));
-    if (!hasNew) return;
-
-    playStockAlertBeep();
-
-    setAlertedIds(new Set(currentIds));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthorized, lowStockKey]);
-
-  // Alarm-clock style: while the stock-alert modal is open, keep replaying the
-  // three-tone chime on a tight loop (like an alarm going off) until the
-  // operator dismisses the modal. Driven purely by the modal being open, so it
-  // rings on every tab — including the home / billing page.
-  useEffect(() => {
-    if (!showLowStockAlertModal) return;
-    playStockAlertBeep(); // ring immediately when the modal appears
-    const id = window.setInterval(() => {
-      playStockAlertBeep();
-    }, 1000); // re-ring every second until dismissed
-    return () => window.clearInterval(id);
-  }, [showLowStockAlertModal, playStockAlertBeep]);
-
-  useEffect(() => {
-    if (activeTab === "alerts") {
-      try {
-        const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
-        if (AudioCtx) {
-          const ctx = new AudioCtx();
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.type = "sine";
-          osc.frequency.setValueAtTime(523.25, ctx.currentTime);
-          gain.gain.setValueAtTime(0.1, ctx.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
-          osc.connect(gain).connect(ctx.destination);
-          osc.start();
-          osc.stop(ctx.currentTime + 0.5);
-          setTimeout(() => ctx.close().catch(() => {}), 600);
-        }
-      } catch (err) {}
-      
-      if (lowStockItems.length > 0) {
-        setLowStockAlertProducts(lowStockItems);
-        setShowLowStockAlertModal(true);
-      }
-    }
-  }, [activeTab]);
 
   if (isCheckingAuth) {
     return (
@@ -2625,8 +2395,6 @@ export default function POSBilling() {
       "Category",
       "Price",
       "GST %",
-      "Stock Qty",
-      "Low-Stock Threshold",
       "Batch No",
       "Brand / Manufacturer",
       "HSN Code",
@@ -2642,8 +2410,6 @@ export default function POSBilling() {
       p.category || "",
       p.price ?? "",
       p.gstRate ?? "",
-      p.stockQuantity ?? "",
-      p.lowStockThreshold ?? "",
       p.batchNo || "",
       p.manufacturer || "",
       p.hsnCode || "",
@@ -2671,62 +2437,6 @@ export default function POSBilling() {
     link.setAttribute(
       "download",
       `Inventory_${new Date().toISOString().split("T")[0]}.csv`,
-    );
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  // Downloads the stock-movement ledger (incoming stock with vendor, and sales).
-  const exportStockReportCSV = async () => {
-    let movements;
-    try {
-      movements = await fetchStockMovements();
-    } catch (err) {
-      console.error(err);
-      alert("Couldn't load the stock movements. Please try again.");
-      return;
-    }
-    if (!movements || movements.length === 0) {
-      alert("No stock movements to export yet.");
-      return;
-    }
-    const headers = [
-      "Date",
-      "Type",
-      "Product",
-      "Quantity",
-      "Unit Cost",
-      "Vendor",
-      "Reason / Reference",
-    ];
-    const rows = movements.map((m) => [
-      m.moved_at ? new Date(m.moved_at).toLocaleDateString("en-IN") : "",
-      m.movement_type,
-      m.snapshot_name || "",
-      m.quantity ?? "",
-      Number(m.unit_cost) || 0,
-      m.supplier_name || "",
-      m.reason || "",
-    ]);
-    const csv = [headers, ...rows]
-      .map((row) =>
-        row
-          .map((v) => {
-            const s = String(v ?? "");
-            return `"${s.replace(/"/g, '""')}"`;
-          })
-          .join(","),
-      )
-      .join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute(
-      "download",
-      `Stock_Report_${new Date().toISOString().split("T")[0]}.csv`,
     );
     link.style.visibility = "hidden";
     document.body.appendChild(link);
@@ -2869,50 +2579,6 @@ export default function POSBilling() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-1.5">
-                    Stock Quantity
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    placeholder="0"
-                    className="w-full bg-white border border-gray-200 hover:border-gray-300 focus:border-[#35617C] rounded-lg px-3.5 py-2.5 text-sm font-bold text-black focus:outline-none transition-colors shadow-xs"
-                    value={newCatStock}
-                    onWheel={(e) => e.currentTarget.blur()}
-                    onChange={(e) =>
-                      setNewCatStock(
-                        e.target.value === ""
-                          ? ""
-                          : parseInt(e.target.value, 10),
-                      )
-                    }
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-1.5">
-                    Low-Stock Alert At
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    placeholder="10"
-                    className="w-full bg-white border border-gray-200 hover:border-gray-300 focus:border-[#35617C] rounded-lg px-3.5 py-2.5 text-sm font-bold text-black focus:outline-none transition-colors shadow-xs"
-                    value={newCatThreshold}
-                    onWheel={(e) => e.currentTarget.blur()}
-                    onChange={(e) =>
-                      setNewCatThreshold(
-                        e.target.value === ""
-                          ? ""
-                          : parseInt(e.target.value, 10),
-                      )
-                    }
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-1.5">
                     Batch Number
                   </label>
                   <input
@@ -2953,7 +2619,7 @@ export default function POSBilling() {
 
               <div className="pt-1 border-t border-gray-100">
                 <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-3 mb-2">
-                  Vendor / Supplier (incoming stock)
+                  Vendor / Supplier
                 </p>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -3040,7 +2706,7 @@ export default function POSBilling() {
                     Add New Batch
                   </h3>
                   <p className="text-[11px] text-gray-500 font-medium">
-                    Record batch stock & arrival info
+                    Record batch pricing & arrival info
                   </p>
                 </div>
               </div>
@@ -3096,25 +2762,8 @@ export default function POSBilling() {
                 </div>
               </div>
 
-              {/* Row 2: Stock Quantity & Batch Number */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-1.5">
-                    Stock Quantity
-                  </label>
-                  <input
-                    type="number"
-                    placeholder="0"
-                    className="w-full bg-white border border-gray-200 hover:border-gray-300 focus:border-[#35617C] rounded-lg px-3.5 py-2.5 text-sm font-bold text-black focus:outline-none transition-colors shadow-xs"
-                    value={newCatStock}
-                    onChange={(e) =>
-                      setNewCatStock(
-                        e.target.value ? Number(e.target.value) : "",
-                      )
-                    }
-                    onWheel={(e) => e.currentTarget.blur()}
-                  />
-                </div>
+              {/* Row 2: Batch Number */}
+              <div className="grid grid-cols-1 gap-4">
                 <div>
                   <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-1.5">
                     Batch Number
@@ -3301,29 +2950,6 @@ export default function POSBilling() {
                 {advanceOrders.filter((a) => a.status === "PENDING" || a.status === "READY").length > 0 && (
                   <span className="ml-auto min-w-[22px] h-[22px] px-1.5 rounded-full text-[10px] font-black flex items-center justify-center bg-[#F59E0B] text-white">
                     {advanceOrders.filter((a) => a.status === "PENDING" || a.status === "READY").length}
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={() => {
-                  setActiveTab("alerts");
-                  setCompletedBillData(null);
-                  if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
-                  window.scrollTo({ top: 0, behavior: "instant" });
-                }}
-                className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer relative ${
-                  activeTab === "alerts"
-                    ? "bg-white text-[#27272A] shadow-md"
-                    : "text-white/90 hover:bg-white/20 hover:text-white"
-                }`}
-              >
-                <AlertTriangle className="w-5 h-5 shrink-0" />
-                Stock Alerts
-                {lowStockItems.length > 0 && (
-                  <span
-                    className={`ml-auto min-w-[22px] h-[22px] px-1.5 rounded-full text-[10px] font-black flex items-center justify-center ${activeTab === "alerts" ? "bg-[#DC2626] text-white" : "bg-[#DC2626] text-white animate-pulse"}`}
-                  >
-                    {lowStockItems.length}
                   </span>
                 )}
               </button>
@@ -3823,23 +3449,14 @@ export default function POSBilling() {
                                       );
                                       return list.length > 0 ? (
                                         list.map((catItem) => {
-                                          const isOutOfStock =
-                                            catItem.stockQuantity === 0;
                                           return (
                                             <div
                                               key={catItem.id}
-                                              className={`w-full flex items-center border-b border-transparent last:border-0 hover:bg-[#FFFFFF] transition-colors ${
-                                                isOutOfStock ? "opacity-50" : ""
-                                              }`}
+                                              className="w-full flex items-center border-b border-transparent last:border-0 hover:bg-[#FFFFFF] transition-colors"
                                             >
                                               <button
-                                                className={`flex-1 text-left px-4 py-2.5 flex flex-col ${
-                                                  isOutOfStock
-                                                    ? "cursor-not-allowed"
-                                                    : "cursor-pointer"
-                                                }`}
+                                                className="flex-1 text-left px-4 py-2.5 flex flex-col cursor-pointer"
                                                 onClick={() => {
-                                                  if (isOutOfStock) return;
                                                   updateItem(
                                                     item.id,
                                                     "name",
@@ -3876,13 +3493,6 @@ export default function POSBilling() {
                                                 <div className="flex justify-between items-center w-full">
                                                   <span className="text-xs font-bold text-[#000000]">
                                                     {catItem.name}
-                                                  </span>
-                                                  <span
-                                                    className={`text-[10px] font-bold ${isOutOfStock ? "text-[#27272A]" : "text-green-600"}`}
-                                                  >
-                                                    {isOutOfStock
-                                                      ? "Out of Stock"
-                                                      : `Stock: ${catItem.stockQuantity}`}
                                                   </span>
                                                 </div>
                                                 {catItem.desc && (
@@ -7119,123 +6729,6 @@ export default function POSBilling() {
           </div>
         )}
 
-        {activeTab === "alerts" && (
-          <div className="flex-1 flex flex-col max-w-[1400px] mx-auto w-full pb-8 pr-2 animate-in fade-in duration-300">
-            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
-              <div>
-                <h2 className="text-[28px] font-black text-[#000000] tracking-tight flex items-center gap-3">
-                  <AlertTriangle className="w-7 h-7 text-[#D97706]" />
-                  Stock Alerts
-                </h2>
-                <p className="text-xs text-[#000000] font-semibold mt-1">
-                  Items at or below their low-stock threshold — restock before
-                  they run out.
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                {outOfStockCount > 0 && (
-                  <div className="flex items-center gap-1.5 text-xs font-black text-white bg-[#DC2626] px-4 py-2 rounded-lg">
-                    <PackageX className="w-3.5 h-3.5" />
-                    {outOfStockCount} out of stock
-                  </div>
-                )}
-                <div className="text-xs font-bold text-[#000000] bg-[#FFFFFF] border border-black/10 px-4 py-2 rounded-lg">
-                  {lowStockItems.length} alert
-                  {lowStockItems.length === 1 ? "" : "s"}
-                </div>
-              </div>
-            </div>
-
-            {lowStockItems.length === 0 ? (
-              <div className="bg-white border border-black/10 rounded-xl p-12 text-center">
-                <div className="w-14 h-14 rounded-full bg-[#10B981]/10 flex items-center justify-center mx-auto mb-4">
-                  <Check className="w-7 h-7 text-[#10B981]" />
-                </div>
-                <p className="text-base font-bold text-[#000000]">All good.</p>
-                <p className="text-xs font-semibold text-[#000000]/60 mt-1">
-                  No products below their low-stock threshold.
-                </p>
-              </div>
-            ) : (
-              <div className="bg-white border border-black/10 rounded-xl overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse min-w-[600px]">
-                    <thead className="bg-[#FAFAFA] border-b border-black/10">
-                      <tr>
-                        <th className="p-3 text-[10px] font-black text-[#000000] uppercase tracking-wider">
-                          Product
-                        </th>
-                        <th className="p-3 text-[10px] font-black text-[#000000] uppercase tracking-wider text-center">
-                          Stock
-                        </th>
-                        <th className="p-3 text-[10px] font-black text-[#000000] uppercase tracking-wider text-center">
-                          Threshold
-                        </th>
-                        <th className="p-3 text-[10px] font-black text-[#000000] uppercase tracking-wider text-center">
-                          Status
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-black/5">
-                      {lowStockItems.map((p) => {
-                        const stock =
-                          typeof p.stockQuantity === "number"
-                            ? p.stockQuantity
-                            : 0;
-                        const threshold =
-                          typeof p.lowStockThreshold === "number"
-                            ? p.lowStockThreshold
-                            : 5;
-                        const isOut = stock <= 0;
-                        const isLow = !isOut && stock <= threshold;
-                        return (
-                          <tr key={p.id} className="hover:bg-[#FAFAFA]">
-                            <td className="p-3">
-                              <div className="text-sm font-bold text-[#000000]">
-                                {p.name}
-                              </div>
-                              {(p.batchNo || p.manufacturer) && (
-                                <div className="text-[10px] font-semibold text-[#000000]/60 mt-0.5">
-                                  {p.manufacturer}
-                                  {p.manufacturer && p.batchNo ? " • " : ""}
-                                  {p.batchNo ? `Batch ${p.batchNo}` : ""}
-                                </div>
-                              )}
-                            </td>
-                            <td
-                              className={`p-3 text-center text-sm font-black ${isOut ? "text-[#DC2626]" : isLow ? "text-[#D97706]" : "text-[#000000]"}`}
-                            >
-                              {stock}
-                            </td>
-                            <td className="p-3 text-center text-sm font-bold text-[#000000]/70">
-                              {threshold}
-                            </td>
-                            <td className="p-3 text-center">
-                              <div className="flex flex-col gap-1 items-center">
-                                {isOut && (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-white bg-[#DC2626] px-2 py-1 rounded">
-                                    <PackageX className="w-3 h-3" />
-                                    Out of Stock
-                                  </span>
-                                )}
-                                {isLow && (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-[#B45309] bg-[#F59E0B]/20 px-2 py-1 rounded">
-                                    Low Stock
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
         {role === "admin" && activeTab === "inventory" && (
           <div className="flex-1 flex flex-col max-w-[1400px] mx-auto w-full pb-8 pr-2 animate-in fade-in duration-300">
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
@@ -7245,8 +6738,7 @@ export default function POSBilling() {
                   Inventory
                 </h2>
                 <p className="text-xs text-[#000000] font-semibold mt-1">
-                  Manage products — add, edit, delete, and track stock, GST &
-                  pricing.
+                  Manage products — add, edit, delete, GST & pricing.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
@@ -7273,8 +6765,6 @@ export default function POSBilling() {
                   <option value="name_desc">Name: Z to A</option>
                   <option value="price_asc">Price: Low to High</option>
                   <option value="price_desc">Price: High to Low</option>
-                  <option value="stock_desc">Stock: High to Low</option>
-                  <option value="stock_asc">Stock: Low to High</option>
                   <option value="gst_desc">GST: High to Low</option>
                   <option value="brand_asc">Brand: A to Z</option>
                 </select>
@@ -7283,12 +6773,6 @@ export default function POSBilling() {
                   className="text-[10px] font-bold text-[#000000] bg-white border border-black/10 hover:bg-[#FAFAFA] px-3 py-2 rounded-lg uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5 text-[#35617C]" /> Inventory CSV
-                </button>
-                <button
-                  onClick={exportStockReportCSV}
-                  className="text-[10px] font-bold text-[#000000] bg-white border border-black/10 hover:bg-[#FAFAFA] px-3 py-2 rounded-lg uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5 text-[#35617C]" /> Stock Report
                 </button>
                 <button
                   onClick={() => {
@@ -7313,7 +6797,7 @@ export default function POSBilling() {
                   No products yet.
                 </p>
                 <p className="text-xs font-semibold text-[#000000]/60 mt-1 mb-4">
-                  Add your first product to start tracking stock and pricing.
+                  Add your first product to start managing your catalog.
                 </p>
                 <button
                   onClick={() => {
@@ -7407,30 +6891,6 @@ export default function POSBilling() {
                         </th>
                         <th
                           onClick={() => {
-                            if (inventorySortField === "stock") {
-                              setInventorySortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
-                            } else {
-                              setInventorySortField("stock");
-                              setInventorySortOrder("asc");
-                            }
-                          }}
-                          className="p-3 text-[10px] font-black text-[#000000] uppercase tracking-wider text-center cursor-pointer hover:bg-black/5 transition-colors"
-                        >
-                          <div className="flex items-center justify-center gap-1.5">
-                            <span>Stock</span>
-                            {inventorySortField === "stock" ? (
-                              inventorySortOrder === "asc" ? (
-                                <ArrowUp className="w-3 h-3 text-[#35617C]" />
-                              ) : (
-                                <ArrowDown className="w-3 h-3 text-[#35617C]" />
-                              )
-                            ) : (
-                              <ArrowUpDown className="w-3 h-3 text-black/30" />
-                            )}
-                          </div>
-                        </th>
-                        <th
-                          onClick={() => {
                             if (inventorySortField === "brand") {
                               setInventorySortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
                             } else {
@@ -7460,15 +6920,6 @@ export default function POSBilling() {
                     </thead>
                     <tbody className="divide-y divide-black/5">
                       {filteredInventory.map((p) => {
-                        const stock =
-                          typeof p.stockQuantity === "number"
-                            ? p.stockQuantity
-                            : 0;
-                        const threshold =
-                          typeof p.lowStockThreshold === "number"
-                            ? p.lowStockThreshold
-                            : 10;
-                        const isLow = stock <= threshold;
                         const isExpanded = expandedProductId === p.id;
                         return (
                           <React.Fragment key={p.id}>
@@ -7494,7 +6945,7 @@ export default function POSBilling() {
                                     title={
                                       isExpanded
                                         ? "Click to collapse details"
-                                        : "Click dropdown to open stock & pricing in detail"
+                                        : "Click dropdown to open batches & pricing in detail"
                                     }
                                     aria-label="Toggle details dropdown"
                                   >
@@ -7544,16 +6995,6 @@ export default function POSBilling() {
                               <td className="p-3 text-center text-sm font-bold text-[#000000]/70">
                                 {p.gstRate ?? 0}%
                               </td>
-                              <td className="p-3 text-center">
-                                <div
-                                  className={`text-sm font-black ${isLow ? "text-[#27272A]" : "text-[#000000]"}`}
-                                >
-                                  {stock}
-                                </div>
-                                <div className="text-[9px] font-semibold text-[#000000]/50">
-                                  min {threshold}
-                                </div>
-                              </td>
                               <td className="p-3">
                                 <div className="text-xs font-semibold text-[#000000]">
                                   {p.manufacturer || (
@@ -7579,7 +7020,7 @@ export default function POSBilling() {
                                     title={
                                       isExpanded
                                         ? "Collapse product details"
-                                        : "Drop down to open stock batches & pricing details"
+                                        : "Drop down to open batches & pricing details"
                                     }
                                   >
                                     <ChevronDown
@@ -7621,11 +7062,11 @@ export default function POSBilling() {
                                         <div className="flex items-center gap-2">
                                           <span className="w-2 h-2 rounded-full bg-[#35617C]" />
                                           <h4 className="text-xs font-black text-black uppercase tracking-wider">
-                                            Product Detail & Stock Batches — {p.name}
+                                            Product Detail & Batches — {p.name}
                                           </h4>
                                         </div>
                                         <p className="text-[10px] text-black/60 font-semibold mt-0.5">
-                                          HSN: {p.hsnCode || "—"} • GST Rate: {p.gstRate ?? 0}% • Available Stock: {stock} pcs • Minimum Threshold: {threshold} pcs
+                                          HSN: {p.hsnCode || "—"} • GST Rate: {p.gstRate ?? 0}%
                                         </p>
                                       </div>
                                       <div className="flex items-center gap-2">
@@ -7667,9 +7108,6 @@ export default function POSBilling() {
                                           </th>
                                           <th className="py-1.5 font-semibold text-center">
                                             Margin
-                                          </th>
-                                          <th className="py-1.5 font-semibold text-right">
-                                            Stock
                                           </th>
                                         </tr>
                                       </thead>
@@ -7713,22 +7151,13 @@ export default function POSBilling() {
                                                 <td className="py-1.5 text-center font-semibold text-green-700">
                                                   {margin}
                                                 </td>
-                                                <td
-                                                  className={`py-1.5 text-right font-black ${
-                                                    b.stock_quantity > 0
-                                                      ? "text-green-600"
-                                                      : "text-[#27272A]"
-                                                  }`}
-                                                >
-                                                  {b.stock_quantity} pcs
-                                                </td>
                                               </tr>
                                             );
                                           })
                                         ) : (
                                           <tr>
                                             <td
-                                              colSpan={7}
+                                              colSpan={6}
                                               className="py-3 text-center text-[10px] font-semibold text-black/40"
                                             >
                                               No batches available. Click "+ Add Batch" to record batch details.
@@ -7959,82 +7388,6 @@ export default function POSBilling() {
             </div>
           </div>
         )}
-
-        {/* Low Stock Alert Modal */}
-        {showLowStockAlertModal && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[500] flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transform scale-100 animate-in zoom-in-95 duration-200 border border-black/10">
-              <div className="p-6 border-b border-black/10">
-                <div className="flex justify-between items-center mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-[#F59E0B]/15 flex items-center justify-center">
-                      <AlertTriangle className="w-5 h-5 text-[#D97706]" />
-                    </div>
-                    <h3 className="font-black text-lg text-black tracking-tight">Stock Alert</h3>
-                  </div>
-                  <button
-                    onClick={() => setShowLowStockAlertModal(false)}
-                    className="text-black/40 hover:text-black transition-colors"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-                <p className="text-sm font-semibold text-black/70">
-                  Some products need restocking. Please review the out-of-stock
-                  and low-stock items below.
-                </p>
-              </div>
-              <div className="max-h-[60vh] overflow-y-auto p-2 bg-gray-50/50">
-                <ul className="space-y-2 p-2">
-                  {lowStockAlertProducts.map((p) => {
-                    const stock =
-                      typeof p.stockQuantity === "number" ? p.stockQuantity : 0;
-                    const threshold =
-                      typeof p.lowStockThreshold === "number"
-                        ? p.lowStockThreshold
-                        : 5;
-                    const isOut = stock <= 0;
-                    return (
-                      <li
-                        key={p.id}
-                        className="bg-white p-3 rounded-lg border border-black/5 flex justify-between items-center gap-3 shadow-sm"
-                      >
-                        <div className="min-w-0">
-                          <span className="block text-xs font-bold text-black truncate">
-                            {p.name}
-                          </span>
-                          <span
-                            className={`inline-flex items-center gap-1 mt-1 text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded ${
-                              isOut
-                                ? "text-white bg-[#DC2626]"
-                                : "text-[#B45309] bg-[#F59E0B]/20"
-                            }`}
-                          >
-                            {isOut ? "Out of Stock" : "Low Stock"}
-                          </span>
-                        </div>
-                        <span
-                          className={`text-xs font-black shrink-0 ${isOut ? "text-[#DC2626]" : "text-black"}`}
-                        >
-                          Stock: {stock}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-              <div className="p-4 border-t border-black/10 bg-white">
-                <button
-                  onClick={() => setShowLowStockAlertModal(false)}
-                  className="w-full py-3 bg-[#27272A] hover:bg-[#27272A] text-white rounded-xl font-bold text-xs uppercase tracking-wider transition-colors shadow-sm"
-                >
-                  Acknowledge
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
 
         {/* Classy Footer */}
         <footer className="mt-auto pt-10 pb-2 border-t border-black/10 flex flex-col md:flex-row justify-between items-center text-[10px] text-[#000000] font-semibold uppercase tracking-wider gap-4">
