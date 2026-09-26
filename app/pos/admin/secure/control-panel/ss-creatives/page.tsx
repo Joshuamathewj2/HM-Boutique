@@ -59,9 +59,6 @@ import {
   createProduct,
   editProduct,
   removeProduct,
-  createBatch,
-  removeBatch,
-  editBatch,
   fetchExpenses,
   createExpense,
   removeExpense,
@@ -74,7 +71,7 @@ import {
   finalizeAdvanceOrder,
   setAdvanceOrderStatus,
 } from "@/app/pos/actions";
-import { ProductWithBatches, ProductBatch, CartItem, Expense, Category, AdvanceOrderWithRelations, AdvanceOrderStatus } from "@/lib/types";
+import { Product, Expense, Category, AdvanceOrderWithRelations, AdvanceOrderStatus } from "@/lib/types";
 
 // Preset expense categories (users can also type a custom one)
 const EXPENSE_CATEGORIES = [
@@ -144,15 +141,7 @@ type CatalogItem = {
   category?: string;
   price?: number;
   gstRate?: number;
-  batchNo?: string;
-  manufacturer?: string;
   hsnCode?: string;
-  supplierName?: string;
-  supplierPhone?: string;
-  supplierInvoiceNo?: string;
-  supplierInvoiceDate?: string;
-  arrivedAt?: string;
-  batches?: ProductBatch[];
   productId?: string;
 };
 
@@ -163,7 +152,6 @@ type OrderItem = {
   price: number;
   qty: number;
   product_id?: string | null;
-  batch_id?: string | null;
 };
 
 type CompletedOrder = {
@@ -231,7 +219,6 @@ const SearchableItemInput = ({
     updateItem(item.id, "name", catItem.name);
     updateItem(item.id, "desc", catItem.desc || "");
     updateItem(item.id, "product_id", catItem.productId || null);
-    updateItem(item.id, "batch_id", null);
     if (catItem.price !== undefined) {
       updateItem(item.id, "price", catItem.price);
     }
@@ -489,7 +476,7 @@ export default function POSBilling() {
   const [expenseSortOrder, setExpenseSortOrder] = useState<"asc" | "desc">("desc");
 
   const [inventorySortField, setInventorySortField] = useState<
-    "name" | "price" | "gst" | "brand"
+    "name" | "price" | "gst"
   >("name");
   const [inventorySortOrder, setInventorySortOrder] = useState<"asc" | "desc">("asc");
 
@@ -561,32 +548,17 @@ export default function POSBilling() {
     setIsAuthorized(false);
   };
 
-  const productToCatalogItem = (p: ProductWithBatches): CatalogItem => {
-    const activeBatch =
-      (p.batches && p.batches.length > 0 ? p.batches[0] : null);
-
+  const productToCatalogItem = (p: Product): CatalogItem => {
     return {
       id: p.id,
       productId: p.id,
       name: p.name,
       desc: p.description || undefined,
       category: p.category || undefined,
-      // Catalog is a pure price list — price comes from the batch selling price
-      // (no stock dependency, so items always price correctly at billing).
-      price:
-        Number(p.active_selling_price) ||
-        Number(activeBatch?.selling_price) ||
-        0,
+      // Catalog is a pure price list — one selling price per product.
+      price: Number(p.selling_price) || 0,
       gstRate: Number(p.gst_rate) || 0,
-      batches: p.batches,
-      batchNo: activeBatch?.batch_no || undefined,
-      manufacturer: activeBatch?.manufacturer || undefined,
-      hsnCode: activeBatch?.hsn_code || undefined,
-      supplierName: activeBatch?.supplier_name || undefined,
-      supplierPhone: activeBatch?.supplier_phone || undefined,
-      supplierInvoiceNo: activeBatch?.supplier_invoice_no || undefined,
-      supplierInvoiceDate: activeBatch?.supplier_invoice_date || undefined,
-      arrivedAt: activeBatch?.arrived_at || undefined,
+      hsnCode: p.hsn_code || undefined,
     };
   };
 
@@ -675,34 +647,21 @@ export default function POSBilling() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [showCatalogModal, setShowCatalogModal] = useState(false);
   const [editingCatalogId, setEditingCatalogId] = useState<string | null>(null);
-  const [editingBatchId, setEditingBatchId] = useState<string | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<CompletedOrder | null>(
     null,
   );
   const [newCatName, setNewCatName] = useState("");
   const [newCatDesc, setNewCatDesc] = useState("");
   const [newCatPrice, setNewCatPrice] = useState<number | "">("");
-  const [newCatCostPrice, setNewCatCostPrice] = useState<number | "">("");
   const [newCatGst, setNewCatGst] = useState<number | "">(18);
-  const [newCatBatch, setNewCatBatch] = useState<string>("");
-  const [newCatManufacturer, setNewCatManufacturer] = useState<string>("");
   const [newCatHsn, setNewCatHsn] = useState<string>("");
   const [newCatCategory, setNewCatCategory] = useState<string>("");
-  // Vendor / supplier details captured with each incoming stock batch.
-  const [newCatSupplierName, setNewCatSupplierName] = useState<string>("");
-  const [newCatSupplierPhone, setNewCatSupplierPhone] = useState<string>("");
-  const [newCatSupplierInvoiceNo, setNewCatSupplierInvoiceNo] = useState<string>("");
-  const [newCatSupplierInvoiceDate, setNewCatSupplierInvoiceDate] = useState<string>("");
 
-  const [isSavingCatalog, setIsSavingCatalog] = useState<boolean>(false); // guards Save Product / Save Batch against double-clicks
+  const [isSavingCatalog, setIsSavingCatalog] = useState<boolean>(false); // guards Save Product against double-clicks
   const [inventorySearch, setInventorySearch] = useState<string>("");
   const [expandedProductId, setExpandedProductId] = useState<string | null>(
     null,
   );
-  const [showBatchModal, setShowBatchModal] = useState<boolean>(false);
-  const [batchTargetProductId, setBatchTargetProductId] = useState<
-    string | null
-  >(null);
 
   const [activeCatalogRowId, setActiveCatalogRowId] = useState<string | null>(
     null,
@@ -814,20 +773,12 @@ export default function POSBilling() {
   };
 
   const resetCatalogForm = () => {
-    setEditingBatchId(null);
     setNewCatName("");
     setNewCatDesc("");
     setNewCatPrice("");
-    setNewCatCostPrice("");
     setNewCatGst(18);
-    setNewCatBatch("");
-    setNewCatManufacturer("");
     setNewCatHsn("");
     setNewCatCategory("");
-    setNewCatSupplierName("");
-    setNewCatSupplierPhone("");
-    setNewCatSupplierInvoiceNo("");
-    setNewCatSupplierInvoiceDate("");
   };
 
   const openEditCatalog = (catItem: CatalogItem, targetRowId?: string) => {
@@ -836,23 +787,8 @@ export default function POSBilling() {
     setNewCatDesc(catItem.desc || "");
     setNewCatPrice(catItem.price ?? "");
     setNewCatGst(typeof catItem.gstRate === "number" ? catItem.gstRate : 18);
-    setNewCatBatch(catItem.batchNo || "");
-    setNewCatManufacturer(catItem.manufacturer || "");
     setNewCatHsn(catItem.hsnCode || "");
     setNewCatCategory(catItem.category || "");
-
-    // Set active batch details
-    const activeBatch =
-      catItem.batches?.find((b) => b.stock_quantity > 0) ||
-      (catItem.batches && catItem.batches.length > 0
-        ? catItem.batches[0]
-        : null);
-    setEditingBatchId(activeBatch ? activeBatch.id : null);
-    setNewCatCostPrice(activeBatch ? activeBatch.cost_price || "" : "");
-    setNewCatSupplierName(activeBatch?.supplier_name || "");
-    setNewCatSupplierPhone(activeBatch?.supplier_phone || "");
-    setNewCatSupplierInvoiceNo(activeBatch?.supplier_invoice_no || "");
-    setNewCatSupplierInvoiceDate(activeBatch?.supplier_invoice_date || "");
 
     setCatalogTargetRowId(targetRowId || null);
     setShowCatalogModal(true);
@@ -877,16 +813,8 @@ export default function POSBilling() {
       description: newCatDesc || null,
       category: newCatCategory.trim() || "General",
       gst_rate: newCatGst === "" ? 0 : Number(newCatGst),
-      // Catalog is stock-less — quantity tracking removed.
-      low_stock_threshold: 0,
-    };
-
-    // Vendor / supplier details shared by the batch payloads below.
-    const supplierFields = {
-      supplier_name: newCatSupplierName.trim() || null,
-      supplier_phone: newCatSupplierPhone.trim() || null,
-      supplier_invoice_no: newCatSupplierInvoiceNo.trim() || null,
-      supplier_invoice_date: newCatSupplierInvoiceDate || null,
+      hsn_code: newCatHsn.trim() || null,
+      selling_price: newCatPrice === "" ? 0 : Number(newCatPrice),
     };
 
     // Persist a newly-typed category so it appears in the managed list next time.
@@ -917,37 +845,15 @@ export default function POSBilling() {
         return;
       }
 
-      if (editingBatchId) {
-        await editBatch(editingBatchId, {
-          batch_no: newCatBatch || null,
-          manufacturer: newCatManufacturer || null,
-          hsn_code: newCatHsn || null,
-          cost_price: newCatCostPrice === "" ? 0 : Number(newCatCostPrice),
-          selling_price: newCatPrice === "" ? 0 : Number(newCatPrice),
-          stock_quantity: 0,
-          ...supplierFields,
-        });
-
-        // Refresh catalog to reflect batch changes
-        const updatedProducts = await fetchProducts();
-        setCatalog(updatedProducts.map(productToCatalogItem));
-      } else {
-        setCatalog((prev) =>
-          prev.map((c) =>
-            c.id === editingCatalogId
-              ? {
-                  ...c,
-                  name: data.name,
-                  desc: data.description || undefined,
-                  gstRate: Number(data.gst_rate) || 0,
-                }
-              : c,
-          ),
-        );
-      }
+      setCatalog((prev) =>
+        prev.map((c) =>
+          c.id === editingCatalogId ? productToCatalogItem(data) : c,
+        ),
+      );
 
       if (catalogTargetRowId) {
         updateItem(catalogTargetRowId, "name", data.name);
+        updateItem(catalogTargetRowId, "price", Number(data.selling_price) || 0);
         setCatalogTargetRowId(null);
       }
 
@@ -956,35 +862,15 @@ export default function POSBilling() {
       setShowCatalogModal(false);
     } else {
       const product = await createProduct(productPayload);
-
-      const batchPayload = {
-        batch_no: newCatBatch || null,
-        manufacturer: newCatManufacturer || null,
-        hsn_code: newCatHsn || null,
-        cost_price: newCatCostPrice === "" ? 0 : Number(newCatCostPrice),
-        selling_price: newCatPrice === "" ? 0 : Number(newCatPrice),
-        stock_quantity: 0,
-        ...supplierFields,
-      };
-
-      await createBatch(product.id, batchPayload);
-
-      const data = (await fetchProducts()).find((p) => p.id === product.id) || {
-        ...product,
-        batches: [],
-        total_stock: batchPayload.stock_quantity,
-        active_selling_price: batchPayload.selling_price,
-      };
-      const newItem = productToCatalogItem(data as any);
+      const newItem = productToCatalogItem(product);
       setCatalog([...catalog, newItem]);
 
       if (catalogTargetRowId) {
-        updateItem(catalogTargetRowId, "name", data.name);
+        updateItem(catalogTargetRowId, "name", product.name);
         updateItem(
           catalogTargetRowId,
           "price",
-          Number(data.active_selling_price) ||
-            (newCatPrice === "" ? 0 : Number(newCatPrice)),
+          Number(product.selling_price) || 0,
         );
         setCatalogTargetRowId(null);
       }
@@ -992,39 +878,6 @@ export default function POSBilling() {
       resetCatalogForm();
       setShowCatalogModal(false);
     }
-    } finally {
-      setIsSavingCatalog(false);
-    }
-  };
-
-  const handleAddBatchSubmit = async () => {
-    if (!batchTargetProductId) return;
-    if (isSavingCatalog) return; // ignore double-clicks
-    setIsSavingCatalog(true);
-    try {
-      const batchPayload = {
-        batch_no: newCatBatch || null,
-        manufacturer: newCatManufacturer || null,
-        hsn_code: newCatHsn || null,
-        cost_price: newCatCostPrice === "" ? 0 : Number(newCatCostPrice),
-        selling_price: newCatPrice === "" ? 0 : Number(newCatPrice),
-        stock_quantity: 0,
-        supplier_name: newCatSupplierName.trim() || null,
-        supplier_phone: newCatSupplierPhone.trim() || null,
-        supplier_invoice_no: newCatSupplierInvoiceNo.trim() || null,
-        supplier_invoice_date: newCatSupplierInvoiceDate || null,
-      };
-      await createBatch(batchTargetProductId, batchPayload);
-
-      const data = await fetchProducts();
-      setCatalog(data.map(productToCatalogItem));
-
-      setShowBatchModal(false);
-      resetCatalogForm();
-      setBatchTargetProductId(null);
-    } catch (err) {
-      console.error(err);
-      alert("Failed to add batch.");
     } finally {
       setIsSavingCatalog(false);
     }
@@ -1357,7 +1210,6 @@ export default function POSBilling() {
         items: itemsToSave.map((i) => ({
           id: i.id,
           product_id: i.product_id || null,
-          batch_id: i.batch_id || null,
           name: i.name,
           desc: i.desc,
           price: i.price,
@@ -2071,8 +1923,6 @@ export default function POSBilling() {
       return (
         p.name.toLowerCase().includes(q) ||
         (p.desc || "").toLowerCase().includes(q) ||
-        (p.batchNo || "").toLowerCase().includes(q) ||
-        (p.manufacturer || "").toLowerCase().includes(q) ||
         (p.hsnCode || "").toLowerCase().includes(q)
       );
     })
@@ -2084,10 +1934,6 @@ export default function POSBilling() {
         comparison = (a.price ?? 0) - (b.price ?? 0);
       } else if (inventorySortField === "gst") {
         comparison = (a.gstRate ?? 0) - (b.gstRate ?? 0);
-      } else if (inventorySortField === "brand") {
-        comparison = (a.manufacturer || a.batchNo || "").localeCompare(
-          b.manufacturer || b.batchNo || "",
-        );
       }
       return inventorySortOrder === "asc" ? comparison : -comparison;
     });
@@ -2395,13 +2241,7 @@ export default function POSBilling() {
       "Category",
       "Price",
       "GST %",
-      "Batch No",
-      "Brand / Manufacturer",
       "HSN Code",
-      "Vendor",
-      "Vendor Phone",
-      "Vendor Bill No",
-      "Vendor Bill Date",
     ];
     const rows = inventoryProducts.map((p) => [
       p.id,
@@ -2410,15 +2250,7 @@ export default function POSBilling() {
       p.category || "",
       p.price ?? "",
       p.gstRate ?? "",
-      p.batchNo || "",
-      p.manufacturer || "",
       p.hsnCode || "",
-      p.supplierName || "",
-      p.supplierPhone || "",
-      p.supplierInvoiceNo || "",
-      p.supplierInvoiceDate
-        ? new Date(p.supplierInvoiceDate).toLocaleDateString("en-IN")
-        : "",
     ]);
     const csv = [headers, ...rows]
       .map((row) =>
@@ -2576,102 +2408,17 @@ export default function POSBilling() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-1.5">
-                    Batch Number
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g., B12345"
-                    className="w-full bg-white border border-gray-200 hover:border-gray-300 focus:border-[#35617C] rounded-lg px-3.5 py-2.5 text-sm font-semibold text-black focus:outline-none transition-colors shadow-xs"
-                    value={newCatBatch}
-                    onChange={(e) => setNewCatBatch(e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-1.5">
-                    HSN Code
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g., 8517"
-                    className="w-full bg-white border border-gray-200 hover:border-gray-300 focus:border-[#35617C] rounded-lg px-3.5 py-2.5 text-sm font-semibold text-black focus:outline-none transition-colors shadow-xs"
-                    value={newCatHsn}
-                    onChange={(e) => setNewCatHsn(e.target.value)}
-                  />
-                </div>
-              </div>
-
               <div>
                 <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-1.5">
-                  Brand / Manufacturer
+                  HSN Code
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g., Samsung, Xiaomi, boAt"
+                  placeholder="e.g., 6117 (shown on GST invoices)"
                   className="w-full bg-white border border-gray-200 hover:border-gray-300 focus:border-[#35617C] rounded-lg px-3.5 py-2.5 text-sm font-semibold text-black focus:outline-none transition-colors shadow-xs"
-                  value={newCatManufacturer}
-                  onChange={(e) => setNewCatManufacturer(e.target.value)}
+                  value={newCatHsn}
+                  onChange={(e) => setNewCatHsn(e.target.value)}
                 />
-              </div>
-
-              <div className="pt-1 border-t border-gray-100">
-                <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-3 mb-2">
-                  Vendor / Supplier
-                </p>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-1.5">
-                      Vendor Name
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g., Sri Traders"
-                      className="w-full bg-white border border-gray-200 hover:border-gray-300 focus:border-[#35617C] rounded-lg px-3.5 py-2.5 text-sm font-semibold text-black focus:outline-none transition-colors shadow-xs"
-                      value={newCatSupplierName}
-                      onChange={(e) => setNewCatSupplierName(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-1.5">
-                      Vendor Phone
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Optional"
-                      className="w-full bg-white border border-gray-200 hover:border-gray-300 focus:border-[#35617C] rounded-lg px-3.5 py-2.5 text-sm font-semibold text-black focus:outline-none transition-colors shadow-xs"
-                      value={newCatSupplierPhone}
-                      onChange={(e) => setNewCatSupplierPhone(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4 mt-3">
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-1.5">
-                      Vendor Bill No
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Optional"
-                      className="w-full bg-white border border-gray-200 hover:border-gray-300 focus:border-[#35617C] rounded-lg px-3.5 py-2.5 text-sm font-semibold text-black focus:outline-none transition-colors shadow-xs"
-                      value={newCatSupplierInvoiceNo}
-                      onChange={(e) => setNewCatSupplierInvoiceNo(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-1.5">
-                      Vendor Bill Date
-                    </label>
-                    <input
-                      type="date"
-                      className="w-full bg-white border border-gray-200 hover:border-gray-300 focus:border-[#35617C] rounded-lg px-3.5 py-2.5 text-sm font-semibold text-black focus:outline-none transition-colors shadow-xs"
-                      value={newCatSupplierInvoiceDate}
-                      onChange={(e) => setNewCatSupplierInvoiceDate(e.target.value)}
-                    />
-                  </div>
-                </div>
               </div>
 
               <button
@@ -2685,169 +2432,6 @@ export default function POSBilling() {
                   <PackagePlus className="w-4 h-4" />
                 )}
                 {editingCatalogId ? "Save Changes" : "Save Product to Catalog"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add New Batch Modal */}
-      {showBatchModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.3)] border border-black/10 w-full max-w-md overflow-hidden transform animate-in zoom-in-95 duration-200">
-            {/* Header */}
-            <div className="px-6 py-5 bg-white border-b border-black/10 flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-[#35617C]/10 rounded-xl flex items-center justify-center text-[#35617C]">
-                  <PackagePlus className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-extrabold text-base text-black tracking-tight">
-                    Add New Batch
-                  </h3>
-                  <p className="text-[11px] text-gray-500 font-medium">
-                    Record batch pricing & arrival info
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  resetCatalogForm();
-                  setBatchTargetProductId(null);
-                  setShowBatchModal(false);
-                }}
-                className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Form Body - Clear 2-column layout */}
-            <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto bg-white">
-              {/* Row 1: Pricing */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-1.5">
-                    Cost Price (₹)
-                  </label>
-                  <input
-                    type="number"
-                    placeholder="0.00"
-                    className="w-full bg-white border border-gray-200 hover:border-gray-300 focus:border-[#35617C] rounded-lg px-3.5 py-2.5 text-sm font-bold text-black focus:outline-none transition-colors shadow-xs"
-                    value={newCatCostPrice}
-                    onChange={(e) =>
-                      setNewCatCostPrice(
-                        e.target.value ? Number(e.target.value) : "",
-                      )
-                    }
-                    onWheel={(e) => e.currentTarget.blur()}
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-1.5">
-                    Selling Price (₹)
-                  </label>
-                  <input
-                    type="number"
-                    placeholder="0.00"
-                    className="w-full bg-white border border-gray-200 hover:border-gray-300 focus:border-[#35617C] rounded-lg px-3.5 py-2.5 text-sm font-bold text-black focus:outline-none transition-colors shadow-xs"
-                    value={newCatPrice}
-                    onChange={(e) =>
-                      setNewCatPrice(
-                        e.target.value ? Number(e.target.value) : "",
-                      )
-                    }
-                    onWheel={(e) => e.currentTarget.blur()}
-                  />
-                </div>
-              </div>
-
-              {/* Row 2: Batch Number */}
-              <div className="grid grid-cols-1 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-1.5">
-                    Batch Number
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g., LOT-002"
-                    className="w-full bg-white border border-gray-200 hover:border-gray-300 focus:border-[#35617C] rounded-lg px-3.5 py-2.5 text-sm font-semibold text-black focus:outline-none transition-colors shadow-xs"
-                    value={newCatBatch}
-                    onChange={(e) => setNewCatBatch(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              {/* Row 3: Vendor / Supplier details for this incoming lot */}
-              <div className="pt-1 border-t border-gray-100">
-                <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-3 mb-2">
-                  Vendor / Supplier
-                </p>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-1.5">
-                      Vendor Name
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g., Sri Traders"
-                      className="w-full bg-white border border-gray-200 hover:border-gray-300 focus:border-[#35617C] rounded-lg px-3.5 py-2.5 text-sm font-semibold text-black focus:outline-none transition-colors shadow-xs"
-                      value={newCatSupplierName}
-                      onChange={(e) => setNewCatSupplierName(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-1.5">
-                      Vendor Phone
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Optional"
-                      className="w-full bg-white border border-gray-200 hover:border-gray-300 focus:border-[#35617C] rounded-lg px-3.5 py-2.5 text-sm font-semibold text-black focus:outline-none transition-colors shadow-xs"
-                      value={newCatSupplierPhone}
-                      onChange={(e) => setNewCatSupplierPhone(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4 mt-3">
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-1.5">
-                      Vendor Bill No
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Optional"
-                      className="w-full bg-white border border-gray-200 hover:border-gray-300 focus:border-[#35617C] rounded-lg px-3.5 py-2.5 text-sm font-semibold text-black focus:outline-none transition-colors shadow-xs"
-                      value={newCatSupplierInvoiceNo}
-                      onChange={(e) => setNewCatSupplierInvoiceNo(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-1.5">
-                      Vendor Bill Date
-                    </label>
-                    <input
-                      type="date"
-                      className="w-full bg-white border border-gray-200 hover:border-gray-300 focus:border-[#35617C] rounded-lg px-3.5 py-2.5 text-sm font-semibold text-black focus:outline-none transition-colors shadow-xs"
-                      value={newCatSupplierInvoiceDate}
-                      onChange={(e) => setNewCatSupplierInvoiceDate(e.target.value)}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Submit Button */}
-              <button
-                onClick={handleAddBatchSubmit}
-                disabled={isSavingCatalog}
-                className="w-full py-3.5 mt-2 bg-[#35617C] hover:bg-[#27272A] text-white rounded-xl font-bold text-xs uppercase tracking-widest transition-colors shadow-sm cursor-pointer flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {isSavingCatalog ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <PackagePlus className="w-4 h-4" />
-                )}
-                Save New Batch
               </button>
             </div>
           </div>
@@ -3472,11 +3056,6 @@ export default function POSBilling() {
                                                     "product_id",
                                                     catItem.productId ||
                                                       catItem.id,
-                                                  );
-                                                  updateItem(
-                                                    item.id,
-                                                    "batch_id",
-                                                    null,
                                                   );
                                                   if (
                                                     catItem.price !== undefined
@@ -6766,7 +6345,6 @@ export default function POSBilling() {
                   <option value="price_asc">Price: Low to High</option>
                   <option value="price_desc">Price: High to Low</option>
                   <option value="gst_desc">GST: High to Low</option>
-                  <option value="brand_asc">Brand: A to Z</option>
                 </select>
                 <button
                   onClick={exportInventoryCSV}
@@ -6889,30 +6467,6 @@ export default function POSBilling() {
                             )}
                           </div>
                         </th>
-                        <th
-                          onClick={() => {
-                            if (inventorySortField === "brand") {
-                              setInventorySortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
-                            } else {
-                              setInventorySortField("brand");
-                              setInventorySortOrder("asc");
-                            }
-                          }}
-                          className="p-3 text-[10px] font-black text-[#000000] uppercase tracking-wider cursor-pointer hover:bg-black/5 transition-colors"
-                        >
-                          <div className="flex items-center gap-1.5">
-                            <span>Brand / Batch</span>
-                            {inventorySortField === "brand" ? (
-                              inventorySortOrder === "asc" ? (
-                                <ArrowUp className="w-3 h-3 text-[#35617C]" />
-                              ) : (
-                                <ArrowDown className="w-3 h-3 text-[#35617C]" />
-                              )
-                            ) : (
-                              <ArrowUpDown className="w-3 h-3 text-black/30" />
-                            )}
-                          </div>
-                        </th>
                         <th className="p-3 text-[10px] font-black text-[#000000] uppercase tracking-wider text-right">
                           Actions
                         </th>
@@ -6945,7 +6499,7 @@ export default function POSBilling() {
                                     title={
                                       isExpanded
                                         ? "Click to collapse details"
-                                        : "Click dropdown to open batches & pricing in detail"
+                                        : "Click dropdown to open product details"
                                     }
                                     aria-label="Toggle details dropdown"
                                   >
@@ -6958,11 +6512,6 @@ export default function POSBilling() {
                                   <div className="flex-1 min-w-0">
                                     <div className="text-sm font-bold text-[#000000] flex items-center gap-2 flex-wrap">
                                       <span>{p.name}</span>
-                                      {p.batches && p.batches.length > 1 && (
-                                        <span className="text-[9px] bg-black/5 px-1.5 py-0.5 rounded text-black/60 font-semibold">
-                                          {p.batches.length} batches
-                                        </span>
-                                      )}
                                       <span
                                         onClick={(e) => {
                                           e.stopPropagation();
@@ -6995,16 +6544,6 @@ export default function POSBilling() {
                               <td className="p-3 text-center text-sm font-bold text-[#000000]/70">
                                 {p.gstRate ?? 0}%
                               </td>
-                              <td className="p-3">
-                                <div className="text-xs font-semibold text-[#000000]">
-                                  {p.manufacturer || (
-                                    <span className="text-[#000000]/40">—</span>
-                                  )}
-                                </div>
-                                <div className="text-[10px] font-semibold text-[#000000]/50">
-                                  {p.batchNo ? `Batch ${p.batchNo}` : ""}
-                                </div>
-                              </td>
                               <td className="p-3 text-right">
                                 <div
                                   className="flex justify-end gap-1.5"
@@ -7020,7 +6559,7 @@ export default function POSBilling() {
                                     title={
                                       isExpanded
                                         ? "Collapse product details"
-                                        : "Drop down to open batches & pricing details"
+                                        : "Open product details"
                                     }
                                   >
                                     <ChevronDown
@@ -7055,30 +6594,21 @@ export default function POSBilling() {
                             </tr>
                             {isExpanded && (
                               <tr className="bg-[#FAFAFA] border-b border-black/5">
-                                <td colSpan={6} className="p-4">
+                                <td colSpan={4} className="p-4">
                                   <div className="bg-white border border-black/10 rounded-xl p-4 shadow-sm">
                                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 mb-3 border-b border-black/5">
-                                      <div>
-                                        <div className="flex items-center gap-2">
-                                          <span className="w-2 h-2 rounded-full bg-[#35617C]" />
-                                          <h4 className="text-xs font-black text-black uppercase tracking-wider">
-                                            Product Detail & Batches — {p.name}
-                                          </h4>
-                                        </div>
-                                        <p className="text-[10px] text-black/60 font-semibold mt-0.5">
-                                          HSN: {p.hsnCode || "—"} • GST Rate: {p.gstRate ?? 0}%
-                                        </p>
+                                      <div className="flex items-center gap-2">
+                                        <span className="w-2 h-2 rounded-full bg-[#35617C]" />
+                                        <h4 className="text-xs font-black text-black uppercase tracking-wider">
+                                          Product Detail — {p.name}
+                                        </h4>
                                       </div>
                                       <div className="flex items-center gap-2">
                                         <button
-                                          onClick={() => {
-                                            setBatchTargetProductId(p.id);
-                                            resetCatalogForm();
-                                            setShowBatchModal(true);
-                                          }}
+                                          onClick={() => openEditCatalog(p)}
                                           className="text-[10px] font-bold text-white bg-[#35617C] hover:bg-[#27272A] px-3 py-1.5 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1 shadow-xs"
                                         >
-                                          <Plus className="w-3 h-3" /> Add Batch
+                                          <Pencil className="w-3 h-3" /> Edit
                                         </button>
                                         <button
                                           onClick={() => setExpandedProductId(null)}
@@ -7088,84 +6618,53 @@ export default function POSBilling() {
                                         </button>
                                       </div>
                                     </div>
-                                    <table className="w-full text-left text-xs">
-                                      <thead>
-                                        <tr className="border-b border-black/5 text-[#000000]/60">
-                                          <th className="py-1.5 font-semibold">
-                                            Batch No
-                                          </th>
-                                          <th className="py-1.5 font-semibold">
-                                            Arrived At
-                                          </th>
-                                          <th className="py-1.5 font-semibold">
-                                            Brand / Supplier
-                                          </th>
-                                          <th className="py-1.5 font-semibold">
-                                            Cost Price
-                                          </th>
-                                          <th className="py-1.5 font-semibold">
-                                            Selling Price
-                                          </th>
-                                          <th className="py-1.5 font-semibold text-center">
-                                            Margin
-                                          </th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {p.batches && p.batches.length > 0 ? (
-                                          p.batches.map((b: any) => {
-                                            let batchArrival = b.arrived_at;
-                                            if (
-                                              batchArrival &&
-                                              batchArrival.includes("T")
-                                            ) {
-                                              batchArrival =
-                                                batchArrival.split("T")[0];
-                                            }
-                                            const cost = Number(b.cost_price) || 0;
-                                            const sell = Number(b.selling_price) || 0;
-                                            const margin =
-                                              cost > 0
-                                                ? (((sell - cost) / cost) * 100).toFixed(1) + "%"
-                                                : "—";
-                                            return (
-                                              <tr
-                                                key={b.id}
-                                                className="border-b border-black/5 last:border-0"
-                                              >
-                                                <td className="py-1.5 font-bold">
-                                                  {b.batch_no || "—"}
-                                                </td>
-                                                <td className="py-1.5">
-                                                  {batchArrival || "—"}
-                                                </td>
-                                                <td className="py-1.5">
-                                                  {b.manufacturer || "—"}
-                                                </td>
-                                                <td className="py-1.5">
-                                                  ₹{cost.toLocaleString()}
-                                                </td>
-                                                <td className="py-1.5">
-                                                  ₹{sell.toLocaleString()}
-                                                </td>
-                                                <td className="py-1.5 text-center font-semibold text-green-700">
-                                                  {margin}
-                                                </td>
-                                              </tr>
-                                            );
-                                          })
-                                        ) : (
-                                          <tr>
-                                            <td
-                                              colSpan={6}
-                                              className="py-3 text-center text-[10px] font-semibold text-black/40"
-                                            >
-                                              No batches available. Click "+ Add Batch" to record batch details.
-                                            </td>
-                                          </tr>
-                                        )}
-                                      </tbody>
-                                    </table>
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+                                      <div>
+                                        <div className="text-[9px] font-bold text-black/40 uppercase tracking-wider mb-0.5">
+                                          Selling Price
+                                        </div>
+                                        <div className="font-black text-black">
+                                          ₹
+                                          {(p.price ?? 0).toLocaleString(undefined, {
+                                            minimumFractionDigits: 2,
+                                          })}
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <div className="text-[9px] font-bold text-black/40 uppercase tracking-wider mb-0.5">
+                                          GST Rate
+                                        </div>
+                                        <div className="font-bold text-black">
+                                          {p.gstRate ?? 0}%
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <div className="text-[9px] font-bold text-black/40 uppercase tracking-wider mb-0.5">
+                                          HSN Code
+                                        </div>
+                                        <div className="font-bold text-black">
+                                          {p.hsnCode || "—"}
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <div className="text-[9px] font-bold text-black/40 uppercase tracking-wider mb-0.5">
+                                          Category
+                                        </div>
+                                        <div className="font-bold text-black">
+                                          {p.category || "General"}
+                                        </div>
+                                      </div>
+                                      {p.desc && (
+                                        <div className="col-span-2 sm:col-span-4">
+                                          <div className="text-[9px] font-bold text-black/40 uppercase tracking-wider mb-0.5">
+                                            Description
+                                          </div>
+                                          <div className="font-semibold text-black/70">
+                                            {p.desc}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
                                 </td>
                               </tr>
@@ -7176,7 +6675,7 @@ export default function POSBilling() {
                       {filteredInventory.length === 0 && (
                         <tr>
                           <td
-                            colSpan={6}
+                            colSpan={4}
                             className="p-8 text-center text-xs font-semibold text-[#000000]/60"
                           >
                             No products match &quot;{inventorySearch}&quot;.

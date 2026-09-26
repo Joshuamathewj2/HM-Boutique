@@ -1,9 +1,6 @@
 import { sql } from './db';
 import {
   Product,
-  ProductBatch,
-  ProductWithBatches,
-  StockMovement,
   Category,
   Customer,
   OrderRow,
@@ -25,33 +22,6 @@ const uid = () => {
   }
   return `id-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 };
-
-// Builds a ProductWithBatches, computing stock and active price.
-// Stock is the sum of remaining batch quantities (FIFO); the active selling
-// price comes from the oldest batch that still has stock.
-function enrichProduct(
-  product: Product,
-  batches: ProductBatch[],
-): ProductWithBatches {
-  let active_selling_price = 0;
-  let foundActiveBatch = false;
-  let batchStock = 0;
-
-  for (const batch of batches) {
-    batchStock += batch.stock_quantity;
-    if (batch.stock_quantity > 0 && !foundActiveBatch) {
-      active_selling_price = Number(batch.selling_price);
-      foundActiveBatch = true;
-    }
-  }
-
-  return {
-    ...product,
-    batches,
-    total_stock: batchStock,
-    active_selling_price,
-  };
-}
 
 export const dbStore = {
   // CATEGORIES
@@ -81,51 +51,41 @@ export const dbStore = {
     return rows as Product[];
   },
 
-  async getProductWithBatches(id: string): Promise<ProductWithBatches | null> {
-    const products = await sql`SELECT * FROM products WHERE id = ${id}`;
-    if (products.length === 0) return null;
-
-    const batches = await sql`SELECT * FROM product_batches WHERE product_id = ${id} ORDER BY arrived_at ASC`;
-
-    return enrichProduct(
-      products[0] as Product,
-      batches as ProductBatch[],
-    );
+  async getProduct(id: string): Promise<Product | null> {
+    const rows = await sql`SELECT * FROM products WHERE id = ${id}`;
+    return rows.length > 0 ? (rows[0] as Product) : null;
   },
 
-  async listProductsWithBatches(): Promise<ProductWithBatches[]> {
-    const [products, allBatches] = await Promise.all([
-      sql`SELECT * FROM products ORDER BY name ASC`,
-      sql`SELECT * FROM product_batches ORDER BY arrived_at ASC`,
-    ]);
-
-    return products.map((p: any) =>
-      enrichProduct(
-        p as Product,
-        (allBatches as ProductBatch[]).filter((b) => b.product_id === p.id),
-      ),
-    );
-  },
-
-  async addProduct(input: { name: string; description: string | null; category: string; gst_rate: number; low_stock_threshold: number }): Promise<Product> {
+  async addProduct(input: {
+    name: string;
+    description: string | null;
+    category: string;
+    gst_rate: number;
+    hsn_code: string | null;
+    selling_price: number;
+  }): Promise<Product> {
     const id = uid();
     const rows = await sql`
-      INSERT INTO products (id, name, description, category, gst_rate, low_stock_threshold)
-      VALUES (${id}, ${input.name}, ${input.description}, ${input.category}, ${input.gst_rate}, ${input.low_stock_threshold})
+      INSERT INTO products (id, name, description, category, gst_rate, hsn_code, selling_price)
+      VALUES (
+        ${id}, ${input.name}, ${input.description}, ${input.category},
+        ${input.gst_rate}, ${input.hsn_code}, ${input.selling_price}
+      )
       RETURNING *
     `;
     return rows[0] as Product;
   },
 
   async updateProduct(id: string, patch: Partial<Product>): Promise<Product | null> {
-    if (Object.keys(patch).length === 0) return this.getProductWithBatches(id);
+    if (Object.keys(patch).length === 0) return this.getProduct(id);
 
     // We update fields individually since dynamic SET with Neon SQL template tag is tricky
     if (patch.name !== undefined) await sql`UPDATE products SET name = ${patch.name} WHERE id = ${id}`;
     if (patch.description !== undefined) await sql`UPDATE products SET description = ${patch.description} WHERE id = ${id}`;
     if (patch.category !== undefined) await sql`UPDATE products SET category = ${patch.category} WHERE id = ${id}`;
     if (patch.gst_rate !== undefined) await sql`UPDATE products SET gst_rate = ${patch.gst_rate} WHERE id = ${id}`;
-    if (patch.low_stock_threshold !== undefined) await sql`UPDATE products SET low_stock_threshold = ${patch.low_stock_threshold} WHERE id = ${id}`;
+    if (patch.hsn_code !== undefined) await sql`UPDATE products SET hsn_code = ${patch.hsn_code} WHERE id = ${id}`;
+    if (patch.selling_price !== undefined) await sql`UPDATE products SET selling_price = ${patch.selling_price} WHERE id = ${id}`;
 
     const rows = await sql`SELECT * FROM products WHERE id = ${id}`;
     return rows.length > 0 ? (rows[0] as Product) : null;
@@ -133,87 +93,6 @@ export const dbStore = {
 
   async deleteProduct(id: string): Promise<void> {
     await sql`DELETE FROM products WHERE id = ${id}`;
-  },
-
-  // BATCHES
-  async addBatch(input: {
-    product_id: string;
-    batch_no: string | null;
-    manufacturer: string | null;
-    supplier_name?: string | null;
-    supplier_phone?: string | null;
-    supplier_invoice_no?: string | null;
-    supplier_invoice_date?: string | null;
-    hsn_code: string | null;
-    cost_price: number;
-    selling_price: number;
-    stock_quantity: number;
-  }): Promise<ProductBatch> {
-    const id = uid();
-    const stockQty = Math.max(0, Math.trunc(Number(input.stock_quantity) || 0));
-
-    const rows = await sql`
-      INSERT INTO product_batches (
-        id, product_id, batch_no, manufacturer,
-        supplier_name, supplier_phone, supplier_invoice_no, supplier_invoice_date,
-        hsn_code, cost_price, selling_price, stock_quantity
-      ) VALUES (
-        ${id}, ${input.product_id}, ${input.batch_no}, ${input.manufacturer},
-        ${input.supplier_name ?? null}, ${input.supplier_phone ?? null},
-        ${input.supplier_invoice_no ?? null}, ${input.supplier_invoice_date ?? null},
-        ${input.hsn_code}, ${input.cost_price}, ${input.selling_price}, ${stockQty}
-      )
-      RETURNING *
-    `;
-
-    // Log the incoming stock as an IN movement for the stock report.
-    if (stockQty > 0) {
-      const nameRows = await sql`SELECT name FROM products WHERE id = ${input.product_id}`;
-      const snapshotName = (nameRows[0] as { name?: string })?.name ?? '';
-      await sql`
-        INSERT INTO stock_movements (
-          id, product_id, batch_id, order_id, movement_type, quantity,
-          unit_cost, snapshot_name, supplier_name, reason
-        ) VALUES (
-          ${uid()}, ${input.product_id}, ${id}, NULL, 'IN', ${stockQty},
-          ${input.cost_price}, ${snapshotName}, ${input.supplier_name ?? null},
-          ${input.batch_no ? `Batch ${input.batch_no}` : null}
-        )
-      `;
-    }
-
-    return rows[0] as ProductBatch;
-  },
-
-  async updateBatch(id: string, patch: Partial<ProductBatch>): Promise<ProductBatch | null> {
-    if (Object.keys(patch).length === 0) return null;
-
-    if (patch.batch_no !== undefined) await sql`UPDATE product_batches SET batch_no = ${patch.batch_no} WHERE id = ${id}`;
-    if (patch.manufacturer !== undefined) await sql`UPDATE product_batches SET manufacturer = ${patch.manufacturer} WHERE id = ${id}`;
-    if (patch.supplier_name !== undefined) await sql`UPDATE product_batches SET supplier_name = ${patch.supplier_name} WHERE id = ${id}`;
-    if (patch.supplier_phone !== undefined) await sql`UPDATE product_batches SET supplier_phone = ${patch.supplier_phone} WHERE id = ${id}`;
-    if (patch.supplier_invoice_no !== undefined) await sql`UPDATE product_batches SET supplier_invoice_no = ${patch.supplier_invoice_no} WHERE id = ${id}`;
-    if (patch.supplier_invoice_date !== undefined) await sql`UPDATE product_batches SET supplier_invoice_date = ${patch.supplier_invoice_date} WHERE id = ${id}`;
-    if (patch.hsn_code !== undefined) await sql`UPDATE product_batches SET hsn_code = ${patch.hsn_code} WHERE id = ${id}`;
-    if (patch.cost_price !== undefined) await sql`UPDATE product_batches SET cost_price = ${patch.cost_price} WHERE id = ${id}`;
-    if (patch.selling_price !== undefined) await sql`UPDATE product_batches SET selling_price = ${patch.selling_price} WHERE id = ${id}`;
-    if (patch.stock_quantity !== undefined) await sql`UPDATE product_batches SET stock_quantity = ${patch.stock_quantity} WHERE id = ${id}`;
-
-    const rows = await sql`SELECT * FROM product_batches WHERE id = ${id}`;
-    return rows.length > 0 ? (rows[0] as ProductBatch) : null;
-  },
-
-  async deleteBatch(id: string): Promise<void> {
-    await sql`DELETE FROM product_batches WHERE id = ${id}`;
-  },
-
-  // STOCK MOVEMENTS (downloadable stock report ledger)
-  async listStockMovements(): Promise<StockMovement[]> {
-    const rows = await sql`
-      SELECT * FROM stock_movements
-      ORDER BY moved_at DESC, created_at DESC
-    `;
-    return rows as StockMovement[];
   },
 
   // CUSTOMERS
@@ -274,8 +153,7 @@ export const dbStore = {
   },
 
   async deleteOrder(id: string): Promise<void> {
-    // The order's OUT stock movements are kept as an audit trail; their order_id
-    // is set to NULL automatically via ON DELETE SET NULL.
+    // Order items are removed via ON DELETE CASCADE.
     await sql`DELETE FROM orders WHERE id = ${id}`;
   },
 
@@ -329,7 +207,7 @@ export const dbStore = {
     await sql`DELETE FROM expenses WHERE id = ${id}`;
   },
 
-  // FIFO DEDUCTION & ORDER SUBMISSION
+  // ORDER SUBMISSION
   async submitOrder(payload: {
     orderId: string;
     customerName: string;
@@ -349,155 +227,62 @@ export const dbStore = {
     cashReceived: number;
     paymentMode: PaymentMode;
   }): Promise<{ orderId: string }> {
-    // Neon HTTP doesn't natively support full interactive transactions in the simple API,
-    // but we can execute them sequentially or use multiple statements.
-    // For simplicity, we'll do sequential awaits which is fine for this scale,
-    // or batch them if possible. Let's do sequential for clarity.
+    // Neon HTTP doesn't natively support full interactive transactions in the simple
+    // API, so we run statements sequentially/concurrently which is fine at this scale.
 
-    const productIds = Array.from(
-      new Set(
-        payload.items
-          .filter((i) => i.product_id)
-          .map((i) => i.product_id as string)
-      )
+    const customer = await this.upsertCustomer(
+      payload.customerName,
+      payload.customerPhone,
+      payload.customerAddress,
     );
 
-    // Concurrently upsert customer and fetch batches for all products in 1 roundtrip
-    const [customer, allBatches] = await Promise.all([
-      this.upsertCustomer(payload.customerName, payload.customerPhone, payload.customerAddress),
-      productIds.length > 0
-        ? sql`
-            SELECT * FROM product_batches
-            WHERE product_id = ANY(${productIds}) AND stock_quantity > 0
-            ORDER BY arrived_at ASC
-          `
-        : Promise.resolve([]),
-    ]);
-
-    // FIFO Stock Deduction and split items in memory
-    const batchList = [...(allBatches as ProductBatch[])];
-    const finalOrderItems: Omit<OrderItemRow, 'id'>[] = [];
-    const batchUpdates: { id: string; deduction: number }[] = [];
-    // OUT stock movements to log for the stock report (one per batch consumed).
-    const outMovements: {
-      product_id: string;
-      batch_id: string;
-      quantity: number;
-      unit_cost: number;
-      snapshot_name: string;
-    }[] = [];
-
-    for (const item of payload.items) {
-      if (!item.product_id) {
-        finalOrderItems.push({
-          order_id: payload.orderId,
-          product_id: null,
-          batch_id: null,
-          snapshot_name: item.name,
-          snapshot_price: item.price,
-          quantity: item.qty,
-        });
-        continue;
-      }
-
-      let remaining = item.qty;
-      const matchingBatches = batchList.filter(
-        (b) => b.product_id === item.product_id && b.stock_quantity > 0
-      );
-
-      for (const batch of matchingBatches) {
-        if (remaining <= 0) break;
-        const take = Math.min(remaining, batch.stock_quantity);
-        batch.stock_quantity -= take;
-        batchUpdates.push({ id: batch.id, deduction: take });
-        outMovements.push({
-          product_id: item.product_id,
-          batch_id: batch.id,
-          quantity: take,
-          unit_cost: Number(batch.cost_price) || 0,
-          snapshot_name: item.name,
-        });
-
-        finalOrderItems.push({
-          order_id: payload.orderId,
-          product_id: item.product_id,
-          batch_id: batch.id,
-          snapshot_name: item.name,
-          snapshot_price: Number(batch.selling_price),
-          quantity: take,
-        });
-
-        remaining -= take;
-      }
-
-      if (remaining > 0) {
-        finalOrderItems.push({
-          order_id: payload.orderId,
-          product_id: item.product_id,
-          batch_id: null,
-          snapshot_name: item.name,
-          snapshot_price: item.price,
-          quantity: remaining,
-        });
-      }
-    }
+    // Each cart line becomes one order item, snapshotting its name and price.
+    const finalOrderItems: Omit<OrderItemRow, 'id'>[] = payload.items.map((item) => ({
+      order_id: payload.orderId,
+      product_id: item.product_id ?? null,
+      snapshot_name: item.name,
+      snapshot_price: item.price,
+      quantity: item.qty,
+    }));
 
     // Subtotal is GST-inclusive (sum of line prices × qty).
     // grand_total = subtotal - discount + delivery  (GST is embedded in subtotal).
     const subtotalInclusive = payload.grandTotal + payload.discountAmount - payload.deliveryFee;
 
-    // Insert order & execute all batch stock deductions concurrently
-    await Promise.all([
-      sql`
-        INSERT INTO orders (
-          id, customer_id, source, status, is_gst, subtotal, discount_type, discount_value,
-          discount_amount, gst_percentage, gst_amount, delivery_fee, grand_total,
-          cash_received, payment_mode, bill_date, created_at
-        ) VALUES (
-          ${payload.orderId}, ${customer.id}, ${payload.source}, 'COMPLETED', ${payload.isGst},
-          ${subtotalInclusive},
-          ${payload.discountType}, ${payload.discountValue}, ${payload.discountAmount},
-          ${payload.gstPercentage}, ${payload.gstAmount}, ${payload.deliveryFee},
-          ${payload.grandTotal}, ${payload.cashReceived}, ${payload.paymentMode},
-          ${payload.billDate}, now()
-        )
-      `,
-      ...batchUpdates.map((u) =>
-        sql`UPDATE product_batches SET stock_quantity = stock_quantity - ${u.deduction} WHERE id = ${u.id}`
-      ),
-    ]);
+    await sql`
+      INSERT INTO orders (
+        id, customer_id, source, status, is_gst, subtotal, discount_type, discount_value,
+        discount_amount, gst_percentage, gst_amount, delivery_fee, grand_total,
+        cash_received, payment_mode, bill_date, created_at
+      ) VALUES (
+        ${payload.orderId}, ${customer.id}, ${payload.source}, 'COMPLETED', ${payload.isGst},
+        ${subtotalInclusive},
+        ${payload.discountType}, ${payload.discountValue}, ${payload.discountAmount},
+        ${payload.gstPercentage}, ${payload.gstAmount}, ${payload.deliveryFee},
+        ${payload.grandTotal}, ${payload.cashReceived}, ${payload.paymentMode},
+        ${payload.billDate}, now()
+      )
+    `;
 
-    // Insert order items and log OUT stock movements concurrently.
-    // Both reference the order row, which the previous await has already inserted.
-    await Promise.all([
-      ...finalOrderItems.map((oi) =>
+    // Insert order items now that the order row exists.
+    await Promise.all(
+      finalOrderItems.map((oi) =>
         sql`
           INSERT INTO order_items (
-            id, order_id, product_id, batch_id, snapshot_name, snapshot_price, quantity
+            id, order_id, product_id, snapshot_name, snapshot_price, quantity
           ) VALUES (
-            ${uid()}, ${oi.order_id}, ${oi.product_id}, ${oi.batch_id},
+            ${uid()}, ${oi.order_id}, ${oi.product_id},
             ${oi.snapshot_name}, ${oi.snapshot_price}, ${oi.quantity}
           )
         `
       ),
-      ...outMovements.map((m) =>
-        sql`
-          INSERT INTO stock_movements (
-            id, product_id, batch_id, order_id, movement_type, quantity,
-            unit_cost, snapshot_name, supplier_name, reason, moved_at
-          ) VALUES (
-            ${uid()}, ${m.product_id}, ${m.batch_id}, ${payload.orderId}, 'OUT', ${m.quantity},
-            ${m.unit_cost}, ${m.snapshot_name}, NULL, ${'Sale ' + payload.orderId}, ${payload.billDate}
-          )
-        `
-      ),
-    ]);
+    );
 
     return { orderId: payload.orderId };
   },
 
-  // ADVANCE ORDERS — partial-payment holds. Stock is NOT deducted here; that
-  // happens only when the balance is collected and finalizeAdvanceOrder runs.
+  // ADVANCE ORDERS — partial-payment holds. Revenue is recognized only when the
+  // balance is collected and finalizeAdvanceOrder turns the hold into an invoice.
   async listAdvanceOrders(): Promise<AdvanceOrderWithRelations[]> {
     const rows = await sql`
       SELECT a.*, c.name AS customer_name, c.phone AS customer_phone, c.address AS customer_address
@@ -604,7 +389,7 @@ export const dbStore = {
   },
 
   // Collect the remaining balance and turn the hold into a real invoice.
-  // Reuses submitOrder for FIFO stock deduction and revenue recognition.
+  // Reuses submitOrder for revenue recognition.
   async finalizeAdvanceOrder(payload: {
     advanceOrderId: string;
     invoiceId: string;
@@ -626,7 +411,6 @@ export const dbStore = {
     const cart: CartItem[] = advance.items.map((it) => ({
       id: it.id,
       product_id: it.product_id,
-      batch_id: null,
       name: it.snapshot_name,
       desc: it.snapshot_desc || '',
       price: Number(it.snapshot_price),

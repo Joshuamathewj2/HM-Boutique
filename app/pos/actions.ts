@@ -1,7 +1,7 @@
 "use server";
 
 import { dbStore } from "@/lib/dbStore";
-import { Product, ProductBatch, ProductWithBatches, StockMovement, OrderWithRelations, CartItem, Expense, PaymentMode, Category, AdvanceOrderWithRelations, AdvanceOrderStatus } from "@/lib/types";
+import { Product, OrderWithRelations, CartItem, Expense, PaymentMode, Category, AdvanceOrderWithRelations, AdvanceOrderStatus } from "@/lib/types";
 
 // Helper to serialize Date objects from Postgres to strings
 function serialize<T>(data: T): T {
@@ -39,11 +39,11 @@ export async function removeCategory(id: string): Promise<void> {
 }
 
 // Products
-export async function fetchProducts(): Promise<ProductWithBatches[]> {
-  return serialize(await dbStore.listProductsWithBatches());
+export async function fetchProducts(): Promise<Product[]> {
+  return serialize(await dbStore.listProducts());
 }
 
-export async function createProduct(data: { name: string; description: string | null; category: string; gst_rate: number; low_stock_threshold: number }): Promise<Product> {
+export async function createProduct(data: { name: string; description: string | null; category: string; gst_rate: number; hsn_code: string | null; selling_price: number }): Promise<Product> {
   return serialize(await dbStore.addProduct(data));
 }
 
@@ -53,30 +53,6 @@ export async function editProduct(id: string, data: Partial<Product>): Promise<P
 
 export async function removeProduct(id: string): Promise<void> {
   return await dbStore.deleteProduct(id);
-}
-
-// Batches
-export async function createBatch(
-  productId: string,
-  data: Omit<ProductBatch, 'id' | 'product_id' | 'arrived_at'>,
-): Promise<ProductBatch> {
-  return serialize(await dbStore.addBatch({
-    product_id: productId,
-    ...data,
-  }));
-}
-
-export async function editBatch(id: string, data: Partial<ProductBatch>): Promise<ProductBatch | null> {
-  return serialize(await dbStore.updateBatch(id, data));
-}
-
-export async function removeBatch(id: string): Promise<void> {
-  return await dbStore.deleteBatch(id);
-}
-
-// Stock movements (downloadable stock report)
-export async function fetchStockMovements(): Promise<StockMovement[]> {
-  return serialize(await dbStore.listStockMovements());
 }
 
 // Orders

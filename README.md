@@ -17,15 +17,9 @@ A PWA-enabled Point of Sale (POS), billing, and inventory management system for 
 - Send the bill directly to the customer via WhatsApp with a digital invoice link
 
 ### 📦 Inventory (Admin only)
-- Full CRUD on products
-- Per-product **default GST rate** (used to pre-fill GST at billing)
-- Track stock quantity, low-stock threshold, batch/lot number, brand/manufacturer, HSN code
-- FIFO batch (purchase-lot) tracking for cost and selling price
+- Full CRUD on products — a pure price list (no stock tracking)
+- Per-product **selling price**, **default GST rate** (used to pre-fill GST at billing), and **HSN code**
 - Export the complete product catalog to CSV
-
-### 🔔 Stock Alerts (Staff & Admin)
-- Read-only view of items at or below their low-stock threshold
-- Audible alert when new low-stock items are detected
 
 ### 📜 Order History
 - Search orders by ID, customer name, or phone number
@@ -95,15 +89,14 @@ Open http://localhost:3000.
 
 ## Data Model
 
-- **products** — master catalog. Each product has a `gst_rate` (default GST %, editable at billing) and a `low_stock_threshold`.
-- **product_batches** — FIFO purchase lots (cost/selling price, stock).
+- **products** — master price list. Each product has a `selling_price`, a `gst_rate` (default GST %, editable at billing), and an `hsn_code`.
 - **customers**, **orders**, **order_items** — sales records. `orders.is_gst` flags GST invoices vs non-GST bills, which powers the two revenue dashboards.
 
 See `schema.sql` for the full schema.
 
 ## Roles
 
-- **Staff** — Billing Panel, Order History, Stock Alerts (view-only).
+- **Staff** — Billing Panel, Order History (view-only).
 - **Admin** — Full access, including Inventory CRUD, Analytics, and delete permissions.
 
 The role is determined by which passcode is used to log in.
