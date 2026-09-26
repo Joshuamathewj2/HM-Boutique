@@ -89,9 +89,9 @@ const EXPENSE_CATEGORIES = [
 
 const EXPENSE_PAYMENT_MODES = ["CASH", "UPI", "CARD", "BANK", "OTHER"] as const;
 
-// Payment / financing options available at the point of sale.
+// Payment options available at the point of sale (Cash and GPay).
 // Kept in sync with the CHECK constraint on orders.payment_mode in schema.sql.
-const ORDER_PAYMENT_MODES = ["CASH", "TVS", "BAJAJ", "HDP", "DMI"] as const;
+const ORDER_PAYMENT_MODES = ["CASH", "GPAY"] as const;
 type OrderPaymentMode = (typeof ORDER_PAYMENT_MODES)[number];
 
 // Shared date-window test reused by the Expenses tab and the analytics dashboard.
@@ -653,7 +653,7 @@ export default function POSBilling() {
   const [newCatName, setNewCatName] = useState("");
   const [newCatDesc, setNewCatDesc] = useState("");
   const [newCatPrice, setNewCatPrice] = useState<number | "">("");
-  const [newCatGst, setNewCatGst] = useState<number | "">(18);
+  const [newCatGst, setNewCatGst] = useState<number | "">(5);
   const [newCatHsn, setNewCatHsn] = useState<string>("");
   const [newCatCategory, setNewCatCategory] = useState<string>("");
 
@@ -776,7 +776,7 @@ export default function POSBilling() {
     setNewCatName("");
     setNewCatDesc("");
     setNewCatPrice("");
-    setNewCatGst(18);
+    setNewCatGst(5);
     setNewCatHsn("");
     setNewCatCategory("");
   };
@@ -2321,7 +2321,7 @@ export default function POSBilling() {
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g., Redmi Note 13 (128GB)"
+                  placeholder="e.g., Designer Silk Saree / Bridal Blouse"
                   className="w-full bg-white border border-gray-200 hover:border-gray-300 focus:border-[#35617C] rounded-lg px-3.5 py-2.5 text-sm font-bold text-black focus:outline-none transition-colors shadow-xs"
                   value={newCatName}
                   onChange={(e) => setNewCatName(e.target.value)}
@@ -2335,7 +2335,7 @@ export default function POSBilling() {
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g., 128GB, Ice Blue, 6GB RAM"
+                  placeholder="e.g., Pure Kanjeevaram Silk, Pink & Gold Zari, Size 38"
                   className="w-full bg-white border border-gray-200 hover:border-gray-300 focus:border-[#35617C] rounded-lg px-3.5 py-2.5 text-sm font-semibold text-black focus:outline-none transition-colors shadow-xs"
                   value={newCatDesc}
                   onChange={(e) => setNewCatDesc(e.target.value)}
@@ -2349,7 +2349,7 @@ export default function POSBilling() {
                 <input
                   type="text"
                   list="catalog-category-list"
-                  placeholder="e.g., Blouses, Sarees, Fabrics"
+                  placeholder="e.g., Blouses, Sarees, Fabrics, Kurtis"
                   className="w-full bg-white border border-gray-200 hover:border-gray-300 focus:border-[#35617C] rounded-lg px-3.5 py-2.5 text-sm font-semibold text-black focus:outline-none transition-colors shadow-xs"
                   value={newCatCategory}
                   onChange={(e) => setNewCatCategory(e.target.value)}
@@ -2392,7 +2392,7 @@ export default function POSBilling() {
                     min={0}
                     max={100}
                     step="0.01"
-                    placeholder="18"
+                    placeholder="5"
                     className="w-full bg-white border border-gray-200 hover:border-gray-300 focus:border-[#35617C] rounded-lg px-3.5 py-2.5 text-sm font-bold text-black focus:outline-none transition-colors shadow-xs"
                     value={newCatGst}
                     onWheel={(e) => e.currentTarget.blur()}
@@ -2414,7 +2414,7 @@ export default function POSBilling() {
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g., 6117 (shown on GST invoices)"
+                  placeholder="e.g., 6204, 6117 (shown on GST invoices)"
                   className="w-full bg-white border border-gray-200 hover:border-gray-300 focus:border-[#35617C] rounded-lg px-3.5 py-2.5 text-sm font-semibold text-black focus:outline-none transition-colors shadow-xs"
                   value={newCatHsn}
                   onChange={(e) => setNewCatHsn(e.target.value)}
@@ -3413,12 +3413,12 @@ export default function POSBilling() {
                         </div>
                       </div>
 
-                      {/* Financial Option — payment method / EMI provider */}
+                      {/* Financial Option — payment method */}
                       <div className="pt-2 space-y-1.5">
                         <span className="block text-[9px] font-bold text-[#000000] uppercase tracking-wider">
                           Financial Option
                         </span>
-                        <div className="grid grid-cols-5 gap-1.5">
+                        <div className="grid grid-cols-2 gap-1.5">
                           {ORDER_PAYMENT_MODES.map((mode) => (
                             <button
                               key={mode}
@@ -3430,7 +3430,7 @@ export default function POSBilling() {
                                   : "bg-white text-[#000000] border-black/10 hover:border-[#35617C]"
                               }`}
                             >
-                              {mode}
+                              {mode === "GPAY" ? "GPay" : mode}
                             </button>
                           ))}
                         </div>
@@ -3449,10 +3449,10 @@ export default function POSBilling() {
                         </span>
                       </div>
 
-                      {/* Cash / Finance Amount Received */}
+                      {/* Cash / GPay Amount Received */}
                       <div className="bg-[#FFFFFF]/40 border border-black/10 rounded-xl p-4 mt-2">
                         <span className="block text-[9px] font-bold text-[#000000] uppercase tracking-wider mb-0.5">
-                          {paymentMode === "CASH" ? "Cash Payment" : `${paymentMode} Finance`}
+                          {paymentMode === "CASH" ? "Cash Payment" : "GPay Payment"}
                         </span>
                         <label className="block text-[10px] font-bold text-[#000000] mb-2.5">
                           Amount Received (₹)
@@ -3601,7 +3601,7 @@ export default function POSBilling() {
 
                 <div>
                   <label className="block text-[10px] font-bold text-[#000000] uppercase tracking-wider mb-1.5">Deposit Payment Mode</label>
-                  <div className="grid grid-cols-5 gap-1.5">
+                  <div className="grid grid-cols-2 gap-1.5">
                     {ORDER_PAYMENT_MODES.map((mode) => (
                       <button
                         key={mode}
@@ -3610,7 +3610,7 @@ export default function POSBilling() {
                           advDepositPaymentMode === mode ? "bg-[#35617C] text-white border-[#35617C]" : "bg-white text-black border-black/10 hover:border-[#35617C]"
                         }`}
                       >
-                        {mode}
+                        {mode === "GPAY" ? "GPay" : mode}
                       </button>
                     ))}
                   </div>
@@ -3740,7 +3740,7 @@ export default function POSBilling() {
 
                     <div>
                       <label className="block text-[10px] font-bold text-[#000000] uppercase tracking-wider mb-1.5">Payment Method</label>
-                      <div className="grid grid-cols-5 gap-1.5">
+                      <div className="grid grid-cols-2 gap-1.5">
                         {ORDER_PAYMENT_MODES.map((mode) => (
                           <button
                             key={mode}
@@ -3749,7 +3749,7 @@ export default function POSBilling() {
                               receivePaymentMode === mode ? "bg-[#35617C] text-white border-[#35617C]" : "bg-white text-black border-black/10 hover:border-[#35617C]"
                             }`}
                           >
-                            {mode}
+                            {mode === "GPAY" ? "GPay" : mode}
                           </button>
                         ))}
                       </div>
