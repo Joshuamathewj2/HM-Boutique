@@ -95,6 +95,9 @@ export default async function InvoicePage({
   const { id } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const isEmbed = resolvedSearchParams.embed === "true";
+  const isPrint = resolvedSearchParams.print === "true";
+  const paper = resolvedSearchParams.paper || "a4";
+  const size = resolvedSearchParams.size || "a4";
 
   const order = await dbStore.getOrderWithRelations(id);
 
@@ -165,8 +168,16 @@ export default async function InvoicePage({
       <style>{`
         @media print {
           @page {
-            size: A4 portrait;
-            margin: 12mm 10mm;
+            size: ${
+              paper === "thermal"
+                ? size === "58"
+                  ? "58mm auto"
+                  : "80mm auto"
+                : size === "a5"
+                  ? "A5 portrait"
+                  : "A4 portrait"
+            };
+            margin: ${paper === "thermal" ? "3mm" : size === "a5" ? "10mm" : "12mm"};
           }
           html, body {
             background: #ffffff !important;
@@ -198,12 +209,89 @@ export default async function InvoicePage({
             customerPhone={order.customer_phone}
             grandTotal={grandTotalNum}
             isGst={order.is_gst}
+            autoPrint={isPrint}
           />
         </div>
       )}
 
-      {/* Clean, Normal Professional Invoice Sheet */}
-      <div className="invoice-sheet w-full max-w-[760px] bg-white border border-zinc-200/80 shadow-xs rounded-sm p-6 sm:p-12 text-zinc-900 print:border-none print:shadow-none print:p-0 print:rounded-none">
+      {paper === "thermal" ? (
+        <div className={`invoice-sheet bg-white mx-auto text-black font-mono leading-tight p-3 ${size === "58" ? "w-[260px]" : "w-[320px]"}`}>
+          {/* Thermal Receipt Layout */}
+          <div className="text-center pb-3 border-b border-dashed border-black/40 mb-3">
+            <h1 className="text-xl font-bold tracking-tight">SS CREATIVES</h1>
+            <p className="text-[11px] mt-1">55/6, Melaratha Veethi</p>
+            <p className="text-[11px]">Tiruchendur, TN - 628215</p>
+            <p className="text-[11px]">Ph: +91 88072 99918</p>
+            {order.is_gst && <p className="text-[11px] font-bold mt-1">GSTIN: —</p>}
+          </div>
+          <div className="text-[11px] pb-3 border-b border-dashed border-black/40 mb-3 space-y-1">
+            <div className="flex justify-between">
+              <span className="font-bold">{order.is_gst ? "TAX INVOICE" : "INVOICE"}</span>
+              <span>#{order.id}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Date:</span>
+              <span>{formattedDate} {formattedTime}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Customer:</span>
+              <span className="font-semibold text-right">{order.customer_name || "Counter Sale"}</span>
+            </div>
+          </div>
+          <div className="text-[11px] w-full">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-dashed border-black/40">
+                  <th className="py-1 font-bold">Item</th>
+                  <th className="py-1 font-bold text-center">Qty</th>
+                  <th className="py-1 font-bold text-right">Amt</th>
+                </tr>
+              </thead>
+              <tbody className="align-top">
+                {order.items.map((item, i) => (
+                  <tr key={i} className="border-b border-dashed border-black/15">
+                    <td className="py-1.5 pr-1">
+                      <div className="font-semibold">{item.snapshot_name}</div>
+                    </td>
+                    <td className="py-1.5 text-center">{item.quantity}</td>
+                    <td className="py-1.5 text-right font-medium">{(item.quantity * Number(item.snapshot_price)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="text-[11px] py-3 border-b border-dashed border-black/40 mb-3 space-y-1.5">
+            <div className="flex justify-between">
+              <span>Subtotal:</span>
+              <span>{subtotalNum.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+            {discountNum > 0 && (
+              <div className="flex justify-between text-black">
+                <span>Discount:</span>
+                <span>-{discountNum.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+              </div>
+            )}
+            {deliveryFeeNum > 0 && (
+              <div className="flex justify-between">
+                <span>Delivery:</span>
+                <span>{deliveryFeeNum.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-[14px] font-black mt-2 pt-1 border-t border-dashed border-black/40">
+              <span>TOTAL:</span>
+              <span>₹{grandTotalNum.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+          </div>
+          <div className="text-[10px] space-y-1 mb-3">
+            <p className="font-semibold text-center border-b border-dashed border-black/20 pb-2 mb-2">{paymentLabel}</p>
+            <p className="text-[9px] uppercase tracking-wider text-center text-gray-700">{numberToWords(grandTotalNum)}</p>
+          </div>
+          <div className="text-[11px] text-center pt-2 font-semibold italic">
+            Thank you for your business!
+          </div>
+        </div>
+      ) : (
+        <div className="invoice-sheet w-full max-w-[760px] bg-white border border-zinc-200/80 shadow-xs rounded-sm p-6 sm:p-12 text-zinc-900 print:border-none print:shadow-none print:p-0 print:rounded-none">
         {/* Header: Company & Invoice Info */}
         <div className="flex flex-col sm:flex-row justify-between items-start gap-6 pb-6 border-b border-zinc-200">
           <div className="flex items-start gap-3.5 sm:gap-4">
@@ -501,7 +589,8 @@ export default async function InvoicePage({
             <div className="text-[10px] text-zinc-400">For SS Creatives</div>
           </div>
         </div>
-      </div>
+        </div>
+      )}
     </div>
   );
 }

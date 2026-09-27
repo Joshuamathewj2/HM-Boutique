@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Printer, Copy, Check, MessageCircle, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
@@ -10,6 +10,7 @@ interface InvoiceActionsProps {
   customerPhone?: string;
   grandTotal: number;
   isGst?: boolean;
+  autoPrint?: boolean;
 }
 
 export function InvoiceActions({
@@ -18,8 +19,18 @@ export function InvoiceActions({
   customerPhone,
   grandTotal,
   isGst,
+  autoPrint,
 }: InvoiceActionsProps) {
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (autoPrint && typeof window !== "undefined") {
+      const timer = setTimeout(() => {
+        window.print();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [autoPrint]);
 
   const handleCopyLink = () => {
     if (typeof window !== "undefined") {

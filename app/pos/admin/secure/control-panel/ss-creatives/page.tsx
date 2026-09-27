@@ -426,6 +426,8 @@ export default function POSBilling() {
   const [completedBillData, setCompletedBillData] =
     useState<CompletedOrder | null>(null);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState<boolean>(false);
+  const [printModalData, setPrintModalData] = useState<{ id: string, type: "invoice" | "advance" } | null>(null);
+  const [printPrefs, setPrintPrefs] = useState<{ paper: "thermal" | "a4", size: "58" | "80" | "a4" | "a5" }>({ paper: "thermal", size: "80" });
 
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -507,6 +509,13 @@ export default function POSBilling() {
   }, [activeTab, analyticsSubTab, analyticsGstFilter]);
 
   useEffect(() => {
+    const prefs = localStorage.getItem("shalistone_print_prefs");
+    if (prefs) {
+      try {
+        setPrintPrefs(JSON.parse(prefs));
+      } catch (e) {}
+    }
+
     const auth =
       sessionStorage.getItem("pos_authorized") ||
       localStorage.getItem("pos_authorized");
@@ -1561,11 +1570,9 @@ export default function POSBilling() {
     }
   };
 
-  // Opens the printable advance-order receipt in a new tab (auto-prints).
+  // Opens the Print Settings Modal for advance receipts
   const printAdvanceReceipt = (advId: string) => {
-    if (typeof window !== "undefined") {
-      window.open(`/advance/${advId}?print=true`, "_blank");
-    }
+    setPrintModalData({ id: advId, type: "advance" });
   };
 
   // Shares the advance-order receipt link over WhatsApp.
@@ -3104,11 +3111,18 @@ export default function POSBilling() {
               {/* Action Buttons Bar */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 <button
-                  onClick={() => setActiveInvoiceId(completedBillData.id)}
+                  onClick={() => setPrintModalData({ id: completedBillData.id, type: "invoice" })}
                   className="bg-white border border-gray-300 hover:bg-gray-50 text-black py-2.5 px-3 rounded-lg font-bold text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
                 >
                   <Printer className="w-3.5 h-3.5 text-[#35617C]" />
                   Print Receipt
+                </button>
+                <button
+                  onClick={() => setActiveInvoiceId(completedBillData.id)}
+                  className="bg-white border border-gray-300 hover:bg-gray-50 text-black py-2.5 px-3 rounded-lg font-bold text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                >
+                  <Eye className="w-3.5 h-3.5 text-[#35617C]" />
+                  View
                 </button>
                 <button
                   onClick={() => resendWhatsApp(completedBillData)}
@@ -4275,27 +4289,6 @@ export default function POSBilling() {
                           </button>
                         ))}
                       </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        id="receiveIsGst"
-                        checked={receiveIsGst}
-                        onChange={(e) => setReceiveIsGst(e.target.checked)}
-                        className="w-4 h-4"
-                      />
-                      <label htmlFor="receiveIsGst" className="text-xs font-bold text-black">GST Invoice</label>
-                      {receiveIsGst && (
-                        <input
-                          type="number"
-                          value={receiveGstPct}
-                          onChange={(e) => setReceiveGstPct(parseFloat(e.target.value) || 0)}
-                          onWheel={(e) => e.currentTarget.blur()}
-                          className="w-16 bg-white border border-black/15 rounded px-2 py-1 text-xs font-bold focus:outline-none"
-                        />
-                      )}
-                      {receiveIsGst && <span className="text-xs font-bold">%</span>}
                     </div>
 
                     <div className="bg-[#DCFCE7] border border-[#16A34A]/40 rounded-lg p-3 text-center">
@@ -7153,6 +7146,82 @@ export default function POSBilling() {
                   className="w-full h-full border-none absolute inset-0"
                   title={`Invoice ${activeInvoiceId}`}
                 />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Print Settings Modal */}
+        {printModalData && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[500] flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transform scale-100 animate-in zoom-in-95 duration-200">
+              <div className="bg-neutral-900 px-5 py-4 flex items-center justify-between border-b border-neutral-800">
+                <h3 className="font-bold text-white text-sm uppercase tracking-wider flex items-center gap-2">
+                  <Printer className="w-4 h-4 text-neutral-300" />
+                  Print Settings
+                </h3>
+                <button
+                  onClick={() => setPrintModalData(null)}
+                  className="w-7 h-7 flex items-center justify-center bg-white/10 hover:bg-white/20 text-white rounded transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="p-6 space-y-6">
+                <div>
+                  <label className="block text-xs font-black text-black uppercase tracking-wider mb-3">Printer Type</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => setPrintPrefs({ ...printPrefs, paper: "thermal", size: printPrefs.size === "a4" || printPrefs.size === "a5" ? "80" : printPrefs.size })}
+                      className={`flex flex-col items-center p-3 rounded-xl border-2 transition-all cursor-pointer ${printPrefs.paper === "thermal" ? "border-[#35617C] bg-[#35617C]/5 text-[#35617C]" : "border-neutral-200 hover:border-neutral-300 text-neutral-600"}`}
+                    >
+                      <span className="font-bold text-sm">Thermal Roll</span>
+                    </button>
+                    <button
+                      onClick={() => setPrintPrefs({ ...printPrefs, paper: "a4", size: printPrefs.size === "58" || printPrefs.size === "80" ? "a4" : printPrefs.size })}
+                      className={`flex flex-col items-center p-3 rounded-xl border-2 transition-all cursor-pointer ${printPrefs.paper === "a4" ? "border-[#35617C] bg-[#35617C]/5 text-[#35617C]" : "border-neutral-200 hover:border-neutral-300 text-neutral-600"}`}
+                    >
+                      <span className="font-bold text-sm">Sheet (A4/A5)</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-black text-black uppercase tracking-wider mb-3">Paper Size</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {printPrefs.paper === "thermal" ? (
+                      <>
+                        <button onClick={() => setPrintPrefs({ ...printPrefs, size: "58" })} className={`py-2 rounded-lg border-2 font-bold text-xs transition-all cursor-pointer ${printPrefs.size === "58" ? "border-[#35617C] bg-[#35617C]/5 text-[#35617C]" : "border-neutral-200 hover:border-neutral-300 text-neutral-600"}`}>58 mm</button>
+                        <button onClick={() => setPrintPrefs({ ...printPrefs, size: "80" })} className={`py-2 rounded-lg border-2 font-bold text-xs transition-all cursor-pointer ${printPrefs.size === "80" ? "border-[#35617C] bg-[#35617C]/5 text-[#35617C]" : "border-neutral-200 hover:border-neutral-300 text-neutral-600"}`}>80 mm</button>
+                      </>
+                    ) : (
+                      <>
+                        <button onClick={() => setPrintPrefs({ ...printPrefs, size: "a4" })} className={`py-2 rounded-lg border-2 font-bold text-xs transition-all cursor-pointer ${printPrefs.size === "a4" ? "border-[#35617C] bg-[#35617C]/5 text-[#35617C]" : "border-neutral-200 hover:border-neutral-300 text-neutral-600"}`}>A4 Sheet</button>
+                        <button onClick={() => setPrintPrefs({ ...printPrefs, size: "a5" })} className={`py-2 rounded-lg border-2 font-bold text-xs transition-all cursor-pointer ${printPrefs.size === "a5" ? "border-[#35617C] bg-[#35617C]/5 text-[#35617C]" : "border-neutral-200 hover:border-neutral-300 text-neutral-600"}`}>A5 Sheet</button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="bg-neutral-50 px-6 py-4 flex justify-end border-t border-neutral-200 gap-3">
+                <button
+                  onClick={() => setPrintModalData(null)}
+                  className="px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider text-neutral-600 hover:bg-neutral-200 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    localStorage.setItem("shalistone_print_prefs", JSON.stringify(printPrefs));
+                    const baseUrl = printModalData.type === "invoice" ? `/invoice/${printModalData.id}` : `/advance/${printModalData.id}`;
+                    window.open(`${baseUrl}?print=true&paper=${printPrefs.paper}&size=${printPrefs.size}`, "_blank");
+                    setPrintModalData(null);
+                  }}
+                  className="px-6 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider bg-[#35617C] hover:bg-[#254659] text-white shadow-md transition-all cursor-pointer flex items-center gap-2"
+                >
+                  <Printer className="w-4 h-4" />
+                  Print Now
+                </button>
               </div>
             </div>
           </div>
