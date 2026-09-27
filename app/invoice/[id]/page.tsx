@@ -126,8 +126,17 @@ export default async function InvoicePage({
   const gstAmountNum = Number(order.gst_amount) || 0;
   const deliveryFeeNum = Number(order.delivery_fee) || 0;
   const cashReceivedNum = Number(order.cash_received) || 0;
+  const splitCashNum = Number(order.split_cash) || 0;
+  const splitGpayNum = Number(order.split_gpay) || 0;
   const changeReturned =
     cashReceivedNum > grandTotalNum ? cashReceivedNum - grandTotalNum : 0;
+
+  const paymentLabel =
+    order.payment_mode === "SPLIT"
+      ? "Split · Cash + GPay"
+      : order.payment_mode === "GPAY"
+        ? "GPay"
+        : "Cash";
 
   const halfGstRate = order.gst_percentage ? order.gst_percentage / 2 : 9;
   const halfGstAmount = gstAmountNum > 0 ? gstAmountNum / 2 : 0;
@@ -243,7 +252,7 @@ export default async function InvoicePage({
               <div>
                 <span className="text-zinc-400">Payment: </span>
                 <span className="text-zinc-800 font-medium uppercase">
-                  {order.payment_mode} • {order.status}
+                  {paymentLabel} • {order.status}
                 </span>
               </div>
               <div>
@@ -358,15 +367,40 @@ export default async function InvoicePage({
               </div>
             </div>
 
-            {/* Cash details if applicable */}
-            {cashReceivedNum > 0 && (
+            {/* Payment details */}
+            {(cashReceivedNum > 0 || order.payment_mode === "SPLIT") && (
               <div className="text-xs text-zinc-600 space-y-0.5 pt-1">
-                <div>
-                  <span className="text-zinc-400">Cash Received: </span>
-                  <span className="font-mono font-medium text-zinc-800">
-                    ₹{cashReceivedNum.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
+                {order.payment_mode === "SPLIT" ? (
+                  <>
+                    <div>
+                      <span className="text-zinc-400">Paid by Cash: </span>
+                      <span className="font-mono font-medium text-zinc-800">
+                        ₹{splitCashNum.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-zinc-400">Paid by GPay: </span>
+                      <span className="font-mono font-medium text-zinc-800">
+                        ₹{splitGpayNum.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-zinc-400">Total Received: </span>
+                      <span className="font-mono font-medium text-zinc-800">
+                        ₹{cashReceivedNum.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <div>
+                    <span className="text-zinc-400">
+                      {order.payment_mode === "GPAY" ? "Paid via GPay: " : "Cash Received: "}
+                    </span>
+                    <span className="font-mono font-medium text-zinc-800">
+                      ₹{cashReceivedNum.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                )}
                 {changeReturned > 0 && (
                   <div>
                     <span className="text-zinc-400">Change Returned: </span>

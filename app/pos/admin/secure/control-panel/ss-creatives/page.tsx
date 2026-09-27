@@ -54,6 +54,7 @@ import {
   verifyPasscode,
   fetchProducts,
   fetchOrders,
+  fetchOrderById,
   submitOrder,
   removeOrder,
   createProduct,
@@ -64,6 +65,8 @@ import {
   removeExpense,
   fetchCategories,
   createCategory,
+  renameCategory,
+  removeCategory,
   fetchAdvanceOrders,
   createAdvanceOrder,
   cancelAdvanceOrder,
@@ -89,10 +92,12 @@ const EXPENSE_CATEGORIES = [
 
 const EXPENSE_PAYMENT_MODES = ["CASH", "UPI", "CARD", "BANK", "OTHER"] as const;
 
-// Payment options available at the point of sale (Cash and GPay).
-// Kept in sync with the CHECK constraint on orders.payment_mode in schema.sql.
+// Payment options available at the point of sale.
+// ORDER_PAYMENT_MODES is used for single-mode contexts (advance deposit / balance).
+// POS_PAYMENT_MODES adds Split for full sales at the billing counter.
 const ORDER_PAYMENT_MODES = ["CASH", "GPAY"] as const;
-type OrderPaymentMode = (typeof ORDER_PAYMENT_MODES)[number];
+const POS_PAYMENT_MODES = ["CASH", "GPAY", "SPLIT"] as const;
+type OrderPaymentMode = "CASH" | "GPAY" | "SPLIT";
 
 // Shared date-window test reused by the Expenses tab and the analytics dashboard.
 type PeriodKey = "all" | "today" | "week" | "month" | "year" | "custom";
@@ -171,6 +176,8 @@ type CompletedOrder = {
   deliveryFee: number;
   grandTotal: number;
   cashReceived: number;
+  splitCash?: number;
+  splitGpay?: number;
   paymentMode: OrderPaymentMode;
   date: string;
   createdAt: string;
@@ -410,6 +417,9 @@ export default function POSBilling() {
   const [deliveryFee, setDeliveryFee] = useState<number>(0);
   const [cashReceived, setCashReceived] = useState<number>(0);
   const [paymentMode, setPaymentMode] = useState<OrderPaymentMode>("CASH");
+  // Split payment: cash + gpay portions (only used when paymentMode === "SPLIT")
+  const [splitCash, setSplitCash] = useState<number>(0);
+  const [splitGpay, setSplitGpay] = useState<number>(0);
   const [applyGST, setApplyGST] = useState<boolean>(false);
   const [gstPercentage, setGstPercentage] = useState<number>(18);
   const [activeInvoiceId, setActiveInvoiceId] = useState<string | null>(null);
@@ -618,7 +628,9 @@ export default function POSBilling() {
             deliveryFee: Number(o.delivery_fee) || 0,
             grandTotal: Number(o.grand_total) || 0,
             cashReceived: Number(o.cash_received) || 0,
-            paymentMode: (ORDER_PAYMENT_MODES as readonly string[]).includes(
+            splitCash: Number((o as { split_cash?: number }).split_cash) || 0,
+            splitGpay: Number((o as { split_gpay?: number }).split_gpay) || 0,
+            paymentMode: (POS_PAYMENT_MODES as readonly string[]).includes(
               String(o.payment_mode),
             )
               ? (o.payment_mode as OrderPaymentMode)
@@ -659,6 +671,23 @@ export default function POSBilling() {
 
   const [isSavingCatalog, setIsSavingCatalog] = useState<boolean>(false); // guards Save Product against double-clicks
   const [inventorySearch, setInventorySearch] = useState<string>("");
+
+  // Category management (create / rename / delete)
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [editCategoryName, setEditCategoryName] = useState("");
+  const [isSavingCategory, setIsSavingCategory] = useState(false);
+
+  // Advance-order receipt modal (shown after creating an advance order)
+  const [advanceReceipt, setAdvanceReceipt] = useState<{
+    id: string;
+    customerName: string;
+    customerPhone: string;
+    total: number;
+    deposit: number;
+    balance: number;
+  } | null>(null);
   const [expandedProductId, setExpandedProductId] = useState<string | null>(
     null,
   );
@@ -684,6 +713,16 @@ export default function POSBilling() {
     new Date().toISOString().split("T")[0],
   );
   const [historyEndDate, setHistoryEndDate] = useState<string>(
+    new Date().toISOString().split("T")[0],
+  );
+
+  const [advPeriod, setAdvPeriod] = useState<
+    "all" | "today" | "week" | "month" | "year" | "custom"
+  >("all");
+  const [advStartDate, setAdvStartDate] = useState<string>(
+    new Date().toISOString().split("T")[0],
+  );
+  const [advEndDate, setAdvEndDate] = useState<string>(
     new Date().toISOString().split("T")[0],
   );
 
@@ -794,6 +833,82 @@ export default function POSBilling() {
     setShowCatalogModal(true);
   };
 
+  // ── Category management (create / rename / delete) ──────────────────
+  const refreshCategories = async () => {
+    try {
+      const data = await fetchCategories();
+      setCategories(data);
+    } catch (err) {
+      console.error("Failed to refresh categories:", err);
+    }
+  };
+
+  const handleAddCategory = async () => {
+    const name = newCategoryName.trim();
+    if (!name) {
+      alert("Please enter a category name.");
+      return;
+    }
+    if (
+      categories.some((c) => c.name.toLowerCase() === name.toLowerCase())
+    ) {
+      alert("That category already exists.");
+      return;
+    }
+    setIsSavingCategory(true);
+    try {
+      await createCategory(name);
+      setNewCategoryName("");
+      await refreshCategories();
+    } catch (err) {
+      console.error("Failed to add category:", err);
+      alert("Could not add the category. Please try again.");
+    } finally {
+      setIsSavingCategory(false);
+    }
+  };
+
+  const handleSaveEditCategory = async () => {
+    if (!editingCategoryId) return;
+    const name = editCategoryName.trim();
+    if (!name) {
+      alert("Category name cannot be empty.");
+      return;
+    }
+    setIsSavingCategory(true);
+    try {
+      await renameCategory(editingCategoryId, name);
+      setEditingCategoryId(null);
+      setEditCategoryName("");
+      // Renaming also updates products, so refresh both lists.
+      await Promise.all([
+        refreshCategories(),
+        fetchProducts().then((data) => setCatalog(data.map(productToCatalogItem))),
+      ]);
+    } catch (err) {
+      console.error("Failed to rename category:", err);
+      alert("Could not rename the category. Please try again.");
+    } finally {
+      setIsSavingCategory(false);
+    }
+  };
+
+  const handleDeleteCategory = async (cat: Category) => {
+    if (
+      !window.confirm(
+        `Delete category "${cat.name}"? Products already using it keep their category name.`,
+      )
+    )
+      return;
+    try {
+      await removeCategory(cat.id);
+      await refreshCategories();
+    } catch (err) {
+      console.error("Failed to delete category:", err);
+      alert("Could not delete the category. Please try again.");
+    }
+  };
+
   const addToCatalog = async () => {
     if (!newCatName.trim()) {
       alert("Product name is required.");
@@ -812,8 +927,8 @@ export default function POSBilling() {
       name: newCatName.trim(),
       description: newCatDesc || null,
       category: newCatCategory.trim() || "General",
-      gst_rate: newCatGst === "" ? 0 : Number(newCatGst),
-      hsn_code: newCatHsn.trim() || null,
+      gst_rate: 0,
+      hsn_code: null,
       selling_price: newCatPrice === "" ? 0 : Number(newCatPrice),
     };
 
@@ -996,6 +1111,10 @@ export default function POSBilling() {
         })),
       });
 
+      // Capture receipt details before clearing the form.
+      const receiptCustomerName = customerName || "Guest";
+      const receiptCustomerPhone = customerPhone;
+
       // Reset billing form.
       setItems([{ id: "1", name: "", desc: "", price: 0, qty: 1 }]);
       setCustomerName("");
@@ -1004,10 +1123,20 @@ export default function POSBilling() {
       setDiscountValue(0);
       setDeliveryFee(0);
       setCashReceived(0);
+      setSplitCash(0);
+      setSplitGpay(0);
       setShowAdvanceSaveModal(false);
       await fetchData();
-      alert(`Advance order ${advId} saved. Deposit ₹${deposit.toLocaleString(undefined, { minimumFractionDigits: 2 })} recorded.`);
-      setActiveTab("advance");
+
+      // Show a shareable receipt modal (Print / WhatsApp / New Sale).
+      setAdvanceReceipt({
+        id: advId,
+        customerName: receiptCustomerName,
+        customerPhone: receiptCustomerPhone,
+        total: grandTotal,
+        deposit,
+        balance: Math.max(0, grandTotal - deposit),
+      });
     } catch (err) {
       console.error("Failed to save advance order:", err);
       alert("Could not save the advance order. Please try again.");
@@ -1074,7 +1203,51 @@ export default function POSBilling() {
       });
       closeAdvanceDialog();
       await fetchData();
-      alert(`Payment received. Invoice ${invoiceId} created and revenue recognized.`);
+
+      // Open the shared completion modal (Print / WhatsApp / New Sale) for the new invoice.
+      try {
+        const created = await fetchOrderById(invoiceId);
+        if (created) {
+          setCompletedBillData({
+            id: created.id,
+            customerName: created.customer_name || "Guest",
+            customerPhone: created.customer_phone,
+            customerAddress: created.customer_address || null,
+            source: created.source,
+            isGst: Boolean(created.is_gst),
+            items: created.items.map((i, idx) => ({
+              id: i.id || `oi-${created.id}-${idx}`,
+              name: i.snapshot_name,
+              desc: "",
+              price: Number(i.snapshot_price) || 0,
+              qty: Number(i.quantity) || 0,
+            })),
+            subtotal: Number(created.subtotal) || 0,
+            discount: Number(created.discount_amount) || 0,
+            discountType: created.discount_type,
+            discountValue: created.discount_value
+              ? Number(created.discount_value)
+              : undefined,
+            gstPercentage: Number(created.gst_percentage) || 0,
+            gstAmount: Number(created.gst_amount) || 0,
+            deliveryFee: Number(created.delivery_fee) || 0,
+            grandTotal: Number(created.grand_total) || 0,
+            cashReceived: Number(created.cash_received) || 0,
+            splitCash: Number((created as { split_cash?: number }).split_cash) || 0,
+            splitGpay: Number((created as { split_gpay?: number }).split_gpay) || 0,
+            paymentMode: (POS_PAYMENT_MODES as readonly string[]).includes(
+              String(created.payment_mode),
+            )
+              ? (created.payment_mode as OrderPaymentMode)
+              : "CASH",
+            date: created.bill_date,
+            createdAt: created.created_at,
+            status: "Completed",
+          });
+        }
+      } catch (mapErr) {
+        console.error("Could not open completion modal:", mapErr);
+      }
     } catch (err) {
       console.error("Failed to finalize advance order:", err);
       alert("Could not finalize the advance order. Please try again.");
@@ -1196,6 +1369,19 @@ export default function POSBilling() {
       }
     }
 
+    // Resolve the amount tendered and the split breakdown per payment mode.
+    let receivedAmount = cashReceived;
+    let splitCashVal = 0;
+    let splitGpayVal = 0;
+    if (paymentMode === "SPLIT") {
+      splitCashVal = Number(splitCash) || 0;
+      splitGpayVal = Number(splitGpay) || 0;
+      receivedAmount = splitCashVal + splitGpayVal;
+    } else if (paymentMode === "GPAY") {
+      // GPay is an exact digital transfer — no change to return.
+      receivedAmount = cashReceived > 0 ? cashReceived : localGrandTotal;
+    }
+
     setIsSubmittingOrder(true);
 
     try {
@@ -1222,7 +1408,9 @@ export default function POSBilling() {
         gstAmount: localGstAmount,
         deliveryFee: deliveryFee,
         grandTotal: localGrandTotal,
-        cashReceived: cashReceived,
+        cashReceived: receivedAmount,
+        splitCash: splitCashVal,
+        splitGpay: splitGpayVal,
         paymentMode: paymentMode,
       });
 
@@ -1249,7 +1437,9 @@ export default function POSBilling() {
         gstAmount: Number(localGstAmount) || 0,
         deliveryFee: Number(deliveryFee) || 0,
         grandTotal: Number(localGrandTotal) || 0,
-        cashReceived: Number(cashReceived) || 0,
+        cashReceived: Number(receivedAmount) || 0,
+        splitCash: splitCashVal,
+        splitGpay: splitGpayVal,
         paymentMode: paymentMode,
         date: orderTimestamp,
         createdAt: new Date().toISOString(),
@@ -1274,6 +1464,8 @@ export default function POSBilling() {
       setDiscountValue(0);
       setDeliveryFee(0);
       setCashReceived(0);
+      setSplitCash(0);
+      setSplitGpay(0);
       setPaymentMode("CASH");
       setApplyGST(false);
       setGstPercentage(18);
@@ -1367,6 +1559,43 @@ export default function POSBilling() {
     } else {
       window.open(whatsappUrl, "_blank");
     }
+  };
+
+  // Opens the printable advance-order receipt in a new tab (auto-prints).
+  const printAdvanceReceipt = (advId: string) => {
+    if (typeof window !== "undefined") {
+      window.open(`/advance/${advId}?print=true`, "_blank");
+    }
+  };
+
+  // Shares the advance-order receipt link over WhatsApp.
+  const shareAdvanceReceiptWhatsApp = (receipt: {
+    id: string;
+    customerName: string;
+    customerPhone: string;
+    total: number;
+    deposit: number;
+    balance: number;
+  }) => {
+    if (typeof window === "undefined") return;
+    const domain = window.location.origin;
+    const receiptUrl = `${domain}/advance/${receipt.id}`;
+    const fmt = (n: number) =>
+      n.toLocaleString(undefined, { minimumFractionDigits: 2 });
+    const shopEmoji = String.fromCodePoint(0x2728);
+    const receiptEmoji = String.fromCodePoint(0x1f4e6);
+    let message = `${shopEmoji} *SS CREATIVES* ${shopEmoji}\n\n`;
+    message += `Advance order confirmed!\n\n`;
+    message += `Order Total: ₹${fmt(receipt.total)}\n`;
+    message += `Deposit Paid: ₹${fmt(receipt.deposit)}\n`;
+    message += `Balance Due: ₹${fmt(receipt.balance)}\n\n`;
+    message += `${receiptEmoji} View your advance receipt here:\n${receiptUrl}`;
+    const encoded = encodeURIComponent(message);
+    const cleanPhone = (receipt.customerPhone || "").replace(/\D/g, "").slice(-10);
+    const url = cleanPhone
+      ? `https://api.whatsapp.com/send?phone=91${cleanPhone}&text=${encoded}`
+      : `https://api.whatsapp.com/send?text=${encoded}`;
+    window.open(url, "_blank");
   };
 
   const handleDeleteOrder = async (orderId: string) => {
@@ -2240,8 +2469,6 @@ export default function POSBilling() {
       "Description",
       "Category",
       "Price",
-      "GST %",
-      "HSN Code",
     ];
     const rows = inventoryProducts.map((p) => [
       p.id,
@@ -2249,8 +2476,6 @@ export default function POSBilling() {
       p.desc || "",
       p.category || "",
       p.price ?? "",
-      p.gstRate ?? "",
-      p.hsnCode || "",
     ]);
     const csv = [headers, ...rows]
       .map((row) =>
@@ -2278,6 +2503,139 @@ export default function POSBilling() {
 
   return (
     <div className="min-h-screen bg-[#FFFFFF] text-[#000000] flex flex-row font-sans overflow-hidden">
+      {/* Category Management Modal */}
+      {showCategoryModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.3)] border border-black/10 w-full max-w-md overflow-hidden transform animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between p-5 border-b border-black/10">
+              <div className="flex items-center gap-2">
+                <Tag className="w-5 h-5 text-[#35617C]" />
+                <div>
+                  <h3 className="text-base font-black text-black tracking-tight">
+                    Manage Categories
+                  </h3>
+                  <p className="text-[10px] font-semibold text-black/50">
+                    Create, rename or delete product categories
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowCategoryModal(false);
+                  setEditingCategoryId(null);
+                  setEditCategoryName("");
+                  setNewCategoryName("");
+                }}
+                className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {/* Add new category */}
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-1.5">
+                    New Category
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g., Sarees, Blouses, Fabrics"
+                    className="w-full bg-white border border-gray-200 hover:border-gray-300 focus:border-[#35617C] rounded-lg px-3.5 py-2.5 text-sm font-semibold text-black focus:outline-none transition-colors shadow-xs"
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleAddCategory();
+                    }}
+                  />
+                </div>
+                <button
+                  onClick={handleAddCategory}
+                  disabled={isSavingCategory}
+                  className="py-2.5 px-4 bg-[#35617C] hover:bg-[#27272A] text-white rounded-lg font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {isSavingCategory ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Plus className="w-4 h-4" />
+                  )}
+                  Add
+                </button>
+              </div>
+
+              {/* Category list */}
+              <div className="border border-black/10 rounded-lg divide-y divide-black/5 max-h-[320px] overflow-y-auto">
+                {categories.length === 0 ? (
+                  <div className="p-6 text-center text-xs font-semibold text-black/50">
+                    No categories yet. Add your first one above.
+                  </div>
+                ) : (
+                  categories.map((cat) => (
+                    <div
+                      key={cat.id}
+                      className="flex items-center justify-between gap-2 p-2.5"
+                    >
+                      {editingCategoryId === cat.id ? (
+                        <>
+                          <input
+                            type="text"
+                            className="flex-1 bg-white border border-black/15 focus:border-[#35617C] rounded-lg px-3 py-1.5 text-sm font-semibold text-black focus:outline-none"
+                            value={editCategoryName}
+                            onChange={(e) => setEditCategoryName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleSaveEditCategory();
+                            }}
+                            autoFocus
+                          />
+                          <button
+                            onClick={handleSaveEditCategory}
+                            disabled={isSavingCategory}
+                            className="text-[10px] font-bold text-white bg-[#16A34A] hover:bg-[#15803D] px-2.5 py-1.5 rounded uppercase tracking-wider transition-colors cursor-pointer"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => {
+                              setEditingCategoryId(null);
+                              setEditCategoryName("");
+                            }}
+                            className="text-[10px] font-bold text-black/70 hover:text-black bg-black/5 hover:bg-black/10 px-2.5 py-1.5 rounded uppercase tracking-wider transition-colors cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="flex-1 text-sm font-bold text-black truncate">
+                            {cat.name}
+                          </span>
+                          <button
+                            onClick={() => {
+                              setEditingCategoryId(cat.id);
+                              setEditCategoryName(cat.name);
+                            }}
+                            className="text-[10px] font-bold text-[#35617C] hover:text-white hover:bg-[#35617C] border border-[#35617C]/30 px-2.5 py-1.5 rounded uppercase tracking-wider transition-colors cursor-pointer inline-flex items-center gap-1"
+                          >
+                            <Pencil className="w-3 h-3" /> Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCategory(cat)}
+                            className="text-[10px] font-bold text-[#DC2626] hover:text-white hover:bg-[#DC2626] border border-[#DC2626]/30 px-2.5 py-1.5 rounded uppercase tracking-wider transition-colors cursor-pointer inline-flex items-center gap-1"
+                          >
+                            <Trash2 className="w-3 h-3" /> Delete
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Catalog Modal */}
       {showCatalogModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
@@ -2364,60 +2722,21 @@ export default function POSBilling() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-1.5">
-                    Selling Price (₹) <span className="text-[#35617C]">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    placeholder="0.00"
-                    className="w-full bg-white border border-gray-200 hover:border-gray-300 focus:border-[#35617C] rounded-lg px-3.5 py-2.5 text-sm font-bold text-black focus:outline-none transition-colors shadow-xs"
-                    value={newCatPrice}
-                    onWheel={(e) => e.currentTarget.blur()}
-                    onChange={(e) =>
-                      setNewCatPrice(
-                        e.target.value === "" ? "" : parseFloat(e.target.value),
-                      )
-                    }
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-1.5">
-                    GST Rate (%)
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    step="0.01"
-                    placeholder="5"
-                    className="w-full bg-white border border-gray-200 hover:border-gray-300 focus:border-[#35617C] rounded-lg px-3.5 py-2.5 text-sm font-bold text-black focus:outline-none transition-colors shadow-xs"
-                    value={newCatGst}
-                    onWheel={(e) => e.currentTarget.blur()}
-                    onChange={(e) =>
-                      setNewCatGst(
-                        e.target.value === "" ? "" : parseFloat(e.target.value),
-                      )
-                    }
-                  />
-                  <p className="text-[9px] text-gray-400 font-semibold mt-1">
-                    Pre-fills at billing (still editable there)
-                  </p>
-                </div>
-              </div>
-
               <div>
                 <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-1.5">
-                  HSN Code
+                  Selling Price (₹) <span className="text-[#35617C]">*</span>
                 </label>
                 <input
-                  type="text"
-                  placeholder="e.g., 6204, 6117 (shown on GST invoices)"
-                  className="w-full bg-white border border-gray-200 hover:border-gray-300 focus:border-[#35617C] rounded-lg px-3.5 py-2.5 text-sm font-semibold text-black focus:outline-none transition-colors shadow-xs"
-                  value={newCatHsn}
-                  onChange={(e) => setNewCatHsn(e.target.value)}
+                  type="number"
+                  placeholder="0.00"
+                  className="w-full bg-white border border-gray-200 hover:border-gray-300 focus:border-[#35617C] rounded-lg px-3.5 py-2.5 text-sm font-bold text-black focus:outline-none transition-colors shadow-xs"
+                  value={newCatPrice}
+                  onWheel={(e) => e.currentTarget.blur()}
+                  onChange={(e) =>
+                    setNewCatPrice(
+                      e.target.value === "" ? "" : parseFloat(e.target.value),
+                    )
+                  }
                 />
               </div>
 
@@ -2502,22 +2821,6 @@ export default function POSBilling() {
               </button>
               <button
                 onClick={() => {
-                  setActiveTab("orders");
-                  setCompletedBillData(null);
-                  if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
-                  window.scrollTo({ top: 0, behavior: "instant" });
-                }}
-                className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer ${
-                  activeTab === "orders"
-                    ? "bg-white text-[#27272A] shadow-md"
-                    : "text-white/90 hover:bg-white/20 hover:text-white"
-                }`}
-              >
-                <History className="w-5 h-5 shrink-0" />
-                Order History
-              </button>
-              <button
-                onClick={() => {
                   setActiveTab("advance");
                   setCompletedBillData(null);
                   if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
@@ -2536,6 +2839,22 @@ export default function POSBilling() {
                     {advanceOrders.filter((a) => a.status === "PENDING" || a.status === "READY").length}
                   </span>
                 )}
+              </button>
+              <button
+                onClick={() => {
+                  setActiveTab("orders");
+                  setCompletedBillData(null);
+                  if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
+                  window.scrollTo({ top: 0, behavior: "instant" });
+                }}
+                className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer ${
+                  activeTab === "orders"
+                    ? "bg-white text-[#27272A] shadow-md"
+                    : "text-white/90 hover:bg-white/20 hover:text-white"
+                }`}
+              >
+                <History className="w-5 h-5 shrink-0" />
+                Order History
               </button>
               {role === "admin" && (
                 <button
@@ -2666,7 +2985,7 @@ export default function POSBilling() {
         </header>
 
         {/* Bill Generated — shown as a modal over the billing screen (not a new page) */}
-        {activeTab === "billing" && completedBillData && (
+        {completedBillData && (
           <div className="fixed inset-0 z-[390] flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="flex flex-col gap-4 w-full max-w-[640px] min-w-0 bg-white rounded-2xl shadow-2xl p-4 sm:p-5 max-h-[94vh] overflow-y-auto animate-in zoom-in-95 duration-200">
               {/* Header Bar */}
@@ -2700,7 +3019,11 @@ export default function POSBilling() {
                 <div className="text-[10px] font-extrabold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2 flex justify-between items-center">
                   <span>Payment Receipt</span>
                   <span className="text-[9px] font-black text-[#35617C] bg-black/5 px-2 py-0.5 rounded">
-                    {completedBillData.paymentMode}
+                    {completedBillData.paymentMode === "SPLIT"
+                      ? "Split · Cash + GPay"
+                      : completedBillData.paymentMode === "GPAY"
+                        ? "GPay"
+                        : "Cash"}
                   </span>
                 </div>
 
@@ -2716,9 +3039,40 @@ export default function POSBilling() {
                   </span>
                 </div>
 
+                {completedBillData.paymentMode === "SPLIT" && (
+                  <>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-semibold text-gray-600">
+                        Paid by Cash
+                      </span>
+                      <span className="text-sm font-bold text-black">
+                        ₹
+                        {(completedBillData.splitCash || 0).toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                        })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-semibold text-gray-600">
+                        Paid by GPay
+                      </span>
+                      <span className="text-sm font-bold text-black">
+                        ₹
+                        {(completedBillData.splitGpay || 0).toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                        })}
+                      </span>
+                    </div>
+                  </>
+                )}
+
                 <div className="flex justify-between items-center text-xs">
                   <span className="font-semibold text-gray-600">
-                    Amount Received
+                    {completedBillData.paymentMode === "GPAY"
+                      ? "Paid via GPay"
+                      : completedBillData.paymentMode === "SPLIT"
+                        ? "Total Received"
+                        : "Amount Received"}
                   </span>
                   <span className="text-sm font-black text-black">
                     ₹
@@ -2729,20 +3083,22 @@ export default function POSBilling() {
                   </span>
                 </div>
 
-                {/* Balance Returned Box */}
-                <div className="bg-[#F4F4F5] border border-[#E4E4E7] rounded-lg p-3 sm:p-3.5 flex justify-between items-center mt-1">
-                  <span className="text-xs font-bold text-[#7C5A52]">
-                    Balance Returned
-                  </span>
-                  <span className="text-base sm:text-lg font-black text-[#7C5A52]">
-                    ₹
-                    {Math.max(
-                      0,
-                      (completedBillData.cashReceived || 0) -
-                        completedBillData.grandTotal,
-                    ).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
+                {/* Balance Returned Box — cash change only */}
+                {completedBillData.paymentMode !== "GPAY" && (
+                  <div className="bg-[#F4F4F5] border border-[#E4E4E7] rounded-lg p-3 sm:p-3.5 flex justify-between items-center mt-1">
+                    <span className="text-xs font-bold text-[#7C5A52]">
+                      Balance Returned
+                    </span>
+                    <span className="text-base sm:text-lg font-black text-[#7C5A52]">
+                      ₹
+                      {Math.max(
+                        0,
+                        (completedBillData.cashReceived || 0) -
+                          completedBillData.grandTotal,
+                      ).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Action Buttons Bar */}
@@ -2803,6 +3159,94 @@ export default function POSBilling() {
                     </div>
                   ))}
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Advance Order created — shareable receipt modal ─────── */}
+        {advanceReceipt && (
+          <div className="fixed inset-0 z-[395] flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="flex flex-col gap-4 w-full max-w-[520px] min-w-0 bg-white rounded-2xl shadow-2xl p-4 sm:p-5 max-h-[94vh] overflow-y-auto animate-in zoom-in-95 duration-200">
+              <div className="flex justify-between items-center pb-2 border-b border-black/10">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-xl sm:text-2xl font-black text-[#000000] tracking-tight">
+                      Advance Order Saved
+                    </h1>
+                    <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-[#FEF3C7] text-[#B45309]">
+                      Deposit
+                    </span>
+                  </div>
+                  <p className="text-[11px] font-mono font-bold text-[#35617C] mt-0.5">
+                    #{advanceReceipt.id}
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setAdvanceReceipt(null);
+                    setActiveTab("advance");
+                  }}
+                  className="bg-black hover:bg-black/80 text-white px-3.5 py-1.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  New Sale
+                </button>
+              </div>
+
+              {/* Deposit Receipt Card */}
+              <div className="bg-white rounded-xl p-4 sm:p-5 border border-black/10 shadow-xs space-y-3">
+                <div className="text-[10px] font-extrabold text-gray-400 uppercase tracking-widest border-b border-gray-100 pb-2">
+                  Advance Receipt — {advanceReceipt.customerName}
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-semibold text-gray-600">Order Total</span>
+                  <span className="text-lg font-black text-black">
+                    ₹{advanceReceipt.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-semibold text-gray-600">Deposit Paid</span>
+                  <span className="text-sm font-black text-[#166534]">
+                    ₹{advanceReceipt.deposit.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="bg-[#FEE2E2] border border-[#DC2626]/30 rounded-lg p-3 sm:p-3.5 flex justify-between items-center mt-1">
+                  <span className="text-xs font-bold text-[#991B1B]">Balance Due</span>
+                  <span className="text-base sm:text-lg font-black text-[#991B1B]">
+                    ₹{advanceReceipt.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+
+              {/* Action Buttons Bar */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <button
+                  onClick={() => printAdvanceReceipt(advanceReceipt.id)}
+                  className="bg-white border border-gray-300 hover:bg-gray-50 text-black py-2.5 px-3 rounded-lg font-bold text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5 text-[#35617C]" />
+                  Print Receipt
+                </button>
+                <button
+                  onClick={() => shareAdvanceReceiptWhatsApp(advanceReceipt)}
+                  className="bg-[#10B981] hover:bg-[#059669] text-white py-2.5 px-3 rounded-lg font-bold text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.012c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z" />
+                  </svg>
+                  WhatsApp
+                </button>
+                <button
+                  onClick={() => {
+                    setAdvanceReceipt(null);
+                    setActiveTab("advance");
+                  }}
+                  className="bg-black hover:bg-black/80 text-white py-2.5 px-3 rounded-lg font-bold text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  New Sale
+                </button>
               </div>
             </div>
           </div>
@@ -3418,8 +3862,8 @@ export default function POSBilling() {
                         <span className="block text-[9px] font-bold text-[#000000] uppercase tracking-wider">
                           Financial Option
                         </span>
-                        <div className="grid grid-cols-2 gap-1.5">
-                          {ORDER_PAYMENT_MODES.map((mode) => (
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {POS_PAYMENT_MODES.map((mode) => (
                             <button
                               key={mode}
                               type="button"
@@ -3430,7 +3874,7 @@ export default function POSBilling() {
                                   : "bg-white text-[#000000] border-black/10 hover:border-[#35617C]"
                               }`}
                             >
-                              {mode === "GPAY" ? "GPay" : mode}
+                              {mode === "GPAY" ? "GPay" : mode === "SPLIT" ? "Split" : mode}
                             </button>
                           ))}
                         </div>
@@ -3449,28 +3893,104 @@ export default function POSBilling() {
                         </span>
                       </div>
 
-                      {/* Cash / GPay Amount Received */}
-                      <div className="bg-[#FFFFFF]/40 border border-black/10 rounded-xl p-4 mt-2">
-                        <span className="block text-[9px] font-bold text-[#000000] uppercase tracking-wider mb-0.5">
-                          {paymentMode === "CASH" ? "Cash Payment" : "GPay Payment"}
-                        </span>
-                        <label className="block text-[10px] font-bold text-[#000000] mb-2.5">
-                          Amount Received (₹)
-                        </label>
-                        <input
-                          type="number"
-                          className="w-full bg-white border border-black/10 focus:border-[#35617C] rounded-lg px-3 py-2 text-base font-bold text-[#000000] placeholder:text-[#000000] focus:outline-none transition-colors"
-                          value={cashReceived || ""}
-                          onWheel={(e) => e.currentTarget.blur()}
-                          onChange={(e) =>
-                            setCashReceived(parseFloat(e.target.value) || 0)
-                          }
-                          placeholder="0.00"
-                        />
-                      </div>
+                      {/* Payment inputs — per selected method */}
+                      {paymentMode === "SPLIT" ? (
+                        <div className="bg-[#FFFFFF]/40 border border-black/10 rounded-xl p-4 mt-2 space-y-3">
+                          <span className="block text-[9px] font-bold text-[#000000] uppercase tracking-wider">
+                            Split Payment
+                          </span>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-[10px] font-bold text-[#000000] mb-1.5">
+                                Cash (₹)
+                              </label>
+                              <input
+                                type="number"
+                                className="w-full bg-white border border-black/10 focus:border-[#35617C] rounded-lg px-3 py-2 text-base font-bold text-[#000000] placeholder:text-[#000000] focus:outline-none transition-colors"
+                                value={splitCash || ""}
+                                onWheel={(e) => e.currentTarget.blur()}
+                                onChange={(e) =>
+                                  setSplitCash(parseFloat(e.target.value) || 0)
+                                }
+                                placeholder="0.00"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold text-[#000000] mb-1.5">
+                                GPay (₹)
+                              </label>
+                              <input
+                                type="number"
+                                className="w-full bg-white border border-black/10 focus:border-[#35617C] rounded-lg px-3 py-2 text-base font-bold text-[#000000] placeholder:text-[#000000] focus:outline-none transition-colors"
+                                value={splitGpay || ""}
+                                onWheel={(e) => e.currentTarget.blur()}
+                                onChange={(e) =>
+                                  setSplitGpay(parseFloat(e.target.value) || 0)
+                                }
+                                placeholder="0.00"
+                              />
+                            </div>
+                          </div>
+                          <div className="flex justify-between items-center text-xs pt-1 border-t border-black/10">
+                            <span className="font-bold text-[#000000] uppercase tracking-[0.05em]">
+                              Total Received
+                            </span>
+                            <span className="font-black text-sm text-[#35617C]">
+                              ₹
+                              {(splitCash + splitGpay).toLocaleString(undefined, {
+                                minimumFractionDigits: 2,
+                              })}
+                            </span>
+                          </div>
+                          {splitCash + splitGpay < grandTotal ? (
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="font-bold text-[#000000] uppercase tracking-[0.05em]">
+                                Balance Remaining
+                              </span>
+                              <span className="font-black text-sm text-[#DC2626]">
+                                ₹
+                                {(grandTotal - (splitCash + splitGpay)).toLocaleString(undefined, {
+                                  minimumFractionDigits: 2,
+                                })}
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="font-bold text-[#000000] uppercase tracking-[0.05em]">
+                                Change to Return
+                              </span>
+                              <span className="font-black text-sm text-[#00A86B]">
+                                ₹
+                                {(splitCash + splitGpay - grandTotal).toLocaleString(undefined, {
+                                  minimumFractionDigits: 2,
+                                })}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="bg-[#FFFFFF]/40 border border-black/10 rounded-xl p-4 mt-2">
+                          <span className="block text-[9px] font-bold text-[#000000] uppercase tracking-wider mb-0.5">
+                            {paymentMode === "CASH" ? "Cash Payment" : "GPay Payment"}
+                          </span>
+                          <label className="block text-[10px] font-bold text-[#000000] mb-2.5">
+                            {paymentMode === "CASH" ? "Amount Received (₹)" : "GPay Amount (₹)"}
+                          </label>
+                          <input
+                            type="number"
+                            className="w-full bg-white border border-black/10 focus:border-[#35617C] rounded-lg px-3 py-2 text-base font-bold text-[#000000] placeholder:text-[#000000] focus:outline-none transition-colors"
+                            value={cashReceived || ""}
+                            onWheel={(e) => e.currentTarget.blur()}
+                            onChange={(e) =>
+                              setCashReceived(parseFloat(e.target.value) || 0)
+                            }
+                            placeholder="0.00"
+                          />
+                        </div>
+                      )}
 
-                      {/* Change Return */}
-                      {cashReceived > 0 && (
+                      {/* Change Return — cash only */}
+                      {paymentMode === "CASH" && cashReceived > 0 && (
                         <div className="flex justify-between items-center bg-white border border-black/10 rounded-lg p-3 text-xs">
                           <span className="font-bold text-[#000000] uppercase tracking-[0.05em]">
                             Change Return
@@ -3522,35 +4042,6 @@ export default function POSBilling() {
                       >
                         <Clock className="w-4 h-4" />
                         <span>Save as Advance Order</span>
-                      </button>
-
-                      {/* Send Bill Button — completes/saves the sale, then shares it via WhatsApp */}
-                      <button
-                        onClick={handleCompleteAndSendWhatsApp}
-                        disabled={isSubmittingOrder}
-                        className={`w-full mt-2 bg-[#10B981] hover:bg-[#059669] text-white py-3 rounded-lg font-bold text-[10px] uppercase tracking-[0.1em] flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-[0_4px_14px_rgba(16,185,129,0.4)] ${
-                          isSubmittingOrder
-                            ? "opacity-60 cursor-not-allowed"
-                            : "cursor-pointer"
-                        }`}
-                      >
-                        {isSubmittingOrder ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            <span>Processing & Opening WhatsApp...</span>
-                          </>
-                        ) : (
-                          <>
-                            <svg
-                              className="w-3.5 h-3.5"
-                              viewBox="0 0 24 24"
-                              fill="currentColor"
-                            >
-                              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.012c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z" />
-                            </svg>
-                            <span>Send Bill Via WhatsApp</span>
-                          </>
-                        )}
                       </button>
                     </div>
                   </div>
@@ -3713,6 +4204,37 @@ export default function POSBilling() {
                   </div>
                 )}
 
+                {/* Print / Share the advance receipt (view mode) */}
+                {advanceViewMode === "view" && (
+                  <div className="pt-3 border-t border-black/10 grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => printAdvanceReceipt(selectedAdvance.id)}
+                      className="bg-white border border-gray-300 hover:bg-gray-50 text-black py-2.5 px-3 rounded-lg font-bold text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-[#35617C]" />
+                      Print Receipt
+                    </button>
+                    <button
+                      onClick={() =>
+                        shareAdvanceReceiptWhatsApp({
+                          id: selectedAdvance.id,
+                          customerName: selectedAdvance.customer_name || "Guest",
+                          customerPhone: selectedAdvance.customer_phone,
+                          total: Number(selectedAdvance.total_amount) || 0,
+                          deposit: Number(selectedAdvance.deposit_amount) || 0,
+                          balance: balanceRemaining(selectedAdvance),
+                        })
+                      }
+                      className="bg-[#10B981] hover:bg-[#059669] text-white py-2.5 px-3 rounded-lg font-bold text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.012c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z" />
+                      </svg>
+                      Share Receipt
+                    </button>
+                  </div>
+                )}
+
                 {/* Receive-payment specific fields */}
                 {advanceViewMode === "receive" && selectedAdvance.status !== "COMPLETED" && selectedAdvance.status !== "CANCELLED" && (
                   <div className="pt-3 border-t border-black/10 space-y-3">
@@ -3810,6 +4332,79 @@ export default function POSBilling() {
                 <h2 className="text-[28px] font-black text-[#000000] tracking-tight">Advance Orders</h2>
                 <p className="text-xs text-[#000000] font-semibold mt-1">Partial-payment holds — revenue is recognized only when the balance is collected.</p>
               </div>
+
+              {advanceOrders.length > 0 && (
+                <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+                  <div className="flex flex-wrap items-center bg-[#FFFFFF] border border-black/10 rounded-xl p-1 gap-1 max-w-full">
+                    <span className="text-[9px] font-bold text-[#000000] uppercase tracking-wider px-2">
+                      Period:
+                    </span>
+                    {(["all", "today", "week", "month", "year"] as const).map(
+                      (p) => {
+                        const displayLabel =
+                          p === "all"
+                            ? "All Time"
+                            : p === "today"
+                              ? "Today"
+                              : p === "week"
+                                ? "This Week"
+                                : p === "month"
+                                  ? "This Month"
+                                  : "This Year";
+                        const isActive = advPeriod === p;
+                        return (
+                          <button
+                            key={p}
+                            onClick={() => {
+                              setAdvPeriod(p);
+                              setAdvStartDate("");
+                              setAdvEndDate("");
+                            }}
+                            className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                              isActive
+                                ? "bg-[#35617C] text-[#FFFFFF] shadow-sm"
+                                : "text-[#000000] hover:bg-[#000000]/50"
+                            }`}
+                          >
+                            {displayLabel}
+                          </button>
+                        );
+                      },
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center border rounded-xl px-3 py-1.5 gap-2 shadow-sm bg-white border-black/10 min-w-0">
+                    <div className="flex items-center gap-1">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-[#000000]">
+                        From:
+                      </span>
+                      <input
+                        type="date"
+                        value={advStartDate}
+                        onChange={(e) => {
+                          setAdvPeriod("custom");
+                          setAdvStartDate(e.target.value);
+                        }}
+                        className="text-xs font-bold bg-transparent border-none outline-none focus:ring-0 cursor-pointer text-[#000000] w-[115px]"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-[#000000]">
+                        To:
+                      </span>
+                      <input
+                        type="date"
+                        value={advEndDate}
+                        onChange={(e) => {
+                          setAdvPeriod("custom");
+                          setAdvEndDate(e.target.value);
+                        }}
+                        className="text-xs font-bold bg-transparent border-none outline-none focus:ring-0 cursor-pointer text-[#000000] w-[115px]"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Summary cards */}
@@ -3894,6 +4489,7 @@ export default function POSBilling() {
               {(() => {
                 const q = advSearchQuery.trim().toLowerCase();
                 const filtered = advanceOrders.filter((a) => {
+                  if (!isDateInPeriod(a.created_at, advPeriod, advStartDate, advEndDate)) return false;
                   if (advStatusFilter !== "ALL" && a.status !== advStatusFilter) return false;
                   if (!q) return true;
                   return (
@@ -3961,26 +4557,44 @@ export default function POSBilling() {
                         )}
                       </div>
                       <div className="flex items-center justify-end gap-1.5 flex-nowrap">
-                        <button onClick={() => openAdvanceView(a)} title="View details" className="w-8 h-8 shrink-0 rounded-lg bg-[#F4F4F5] hover:bg-[#E4E4E7] text-black flex items-center justify-center cursor-pointer">
+                        <button onClick={() => shareAdvanceReceiptWhatsApp({
+                          id: a.id,
+                          customerName: a.customer_name,
+                          customerPhone: a.customer_phone,
+                          total: Number(a.total_amount),
+                          deposit: Number(a.deposit_amount),
+                          balance: bal
+                        })} title="Send on WhatsApp" className="flex items-center justify-center w-8 h-8 bg-[#10B981]/10 hover:bg-[#10B981]/20 text-[#10B981] rounded-md transition-colors cursor-pointer shrink-0">
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.012c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z" />
+                          </svg>
+                        </button>
+                        <button onClick={() => {
+                          if (a.status === "COMPLETED" && a.finalized_order_id) {
+                            setActiveInvoiceId(a.finalized_order_id);
+                          } else {
+                            printAdvanceReceipt(a.id);
+                          }
+                        }} title={a.status === "COMPLETED" ? "Open Final Invoice" : "Print Advance Receipt"} className="flex items-center justify-center w-8 h-8 bg-[#35617C]/10 hover:bg-[#35617C]/20 text-[#35617C] rounded-md transition-colors cursor-pointer shrink-0">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                        </button>
+                        <button onClick={() => openAdvanceView(a)} title="View details" className="flex items-center justify-center w-8 h-8 bg-black/5 hover:bg-black/10 text-[#000000] rounded-md transition-colors cursor-pointer shrink-0">
                           <Eye className="w-4 h-4" />
                         </button>
                         {a.status !== "COMPLETED" && a.status !== "CANCELLED" && (
-                          <button onClick={() => openReceiveBalance(a)} title="Receive balance" className="w-8 h-8 shrink-0 rounded-lg bg-[#10B981] hover:bg-[#059669] text-white flex items-center justify-center cursor-pointer">
+                          <button onClick={() => openReceiveBalance(a)} title="Receive balance" className="flex items-center justify-center w-8 h-8 bg-[#10B981]/10 hover:bg-[#10B981]/20 text-[#10B981] rounded-md transition-colors cursor-pointer shrink-0">
                             <IndianRupee className="w-4 h-4" />
                           </button>
                         )}
-                        {a.status === "COMPLETED" && a.finalized_order_id && (
-                          <button onClick={() => setActiveInvoiceId(a.finalized_order_id)} title="Open invoice" className="w-8 h-8 shrink-0 rounded-lg bg-[#DBEAFE] hover:bg-[#BFDBFE] text-[#1E3A8A] flex items-center justify-center cursor-pointer">
-                            <Receipt className="w-4 h-4" />
-                          </button>
-                        )}
                         {a.status !== "COMPLETED" && a.status !== "CANCELLED" && (
-                          <button onClick={() => doCancelAdvance(a)} title="Cancel" className="w-8 h-8 shrink-0 rounded-lg bg-[#FEE2E2] hover:bg-[#FECACA] text-[#991B1B] flex items-center justify-center cursor-pointer">
+                          <button onClick={() => doCancelAdvance(a)} title="Cancel" className="flex items-center justify-center w-8 h-8 bg-[#F59E0B]/10 hover:bg-[#F59E0B]/20 text-[#D97706] rounded-md transition-colors cursor-pointer shrink-0">
                             <X className="w-4 h-4" />
                           </button>
                         )}
                         {role === "admin" && (
-                          <button onClick={() => doDeleteAdvance(a)} title="Delete" className="w-8 h-8 shrink-0 rounded-lg bg-[#F4F4F5] hover:bg-[#E4E4E7] text-[#991B1B] flex items-center justify-center cursor-pointer">
+                          <button onClick={() => doDeleteAdvance(a)} title="Delete" className="flex items-center justify-center w-8 h-8 bg-[#DC2626]/10 hover:bg-[#DC2626]/20 text-[#DC2626] rounded-md transition-colors cursor-pointer shrink-0">
                             <Trash2 className="w-4 h-4" />
                           </button>
                         )}
@@ -4152,28 +4766,6 @@ export default function POSBilling() {
                         <option value="OFFLINE">Offline (POS)</option>
                       </select>
                     </div>
-                    <div>
-                      <label className="block text-[9px] font-bold text-[#000000] uppercase tracking-wider mb-1">
-                        Sort By
-                      </label>
-                      <select
-                        className="w-full bg-[#FFFFFF]/30 border border-black/10 focus:border-[#35617C] rounded-lg px-3 py-1.5 text-xs font-bold text-[#000000] focus:outline-none cursor-pointer"
-                        value={`${orderSortField}_${orderSortOrder}`}
-                        onChange={(e) => {
-                          const [f, o] = e.target.value.split("_") as [any, "asc" | "desc"];
-                          setOrderSortField(f);
-                          setOrderSortOrder(o);
-                        }}
-                      >
-                        <option value="date_desc">Date: Newest First</option>
-                        <option value="date_asc">Date: Oldest First</option>
-                        <option value="total_desc">Total: High to Low</option>
-                        <option value="total_asc">Total: Low to High</option>
-                        <option value="id_asc">Order ID: A to Z</option>
-                        <option value="name_asc">Customer Name: A to Z</option>
-                        <option value="status_asc">Status: A to Z</option>
-                      </select>
-                    </div>
                   </div>
                 </div>
 
@@ -4195,77 +4787,14 @@ export default function POSBilling() {
                       <table className="w-full text-left border-collapse">
                         <thead>
                           <tr className="bg-[#FFFFFF] border-b border-black/10 select-none">
-                            <th
-                              onClick={() => {
-                                if (orderSortField === "id") {
-                                  setOrderSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
-                                } else {
-                                  setOrderSortField("id");
-                                  setOrderSortOrder("asc");
-                                }
-                              }}
-                              className="p-4 text-[10px] font-bold text-[#000000] uppercase tracking-widest cursor-pointer hover:bg-black/5 transition-colors"
-                            >
-                              <div className="flex items-center gap-1.5">
-                                <span>Order ID</span>
-                                {orderSortField === "id" ? (
-                                  orderSortOrder === "asc" ? (
-                                    <ArrowUp className="w-3 h-3 text-[#35617C]" />
-                                  ) : (
-                                    <ArrowDown className="w-3 h-3 text-[#35617C]" />
-                                  )
-                                ) : (
-                                  <ArrowUpDown className="w-3 h-3 text-black/30" />
-                                )}
-                              </div>
+                            <th className="p-4 text-[10px] font-bold text-[#000000] uppercase tracking-widest">
+                              Order ID
                             </th>
-                            <th
-                              onClick={() => {
-                                if (orderSortField === "date") {
-                                  setOrderSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
-                                } else {
-                                  setOrderSortField("date");
-                                  setOrderSortOrder("desc");
-                                }
-                              }}
-                              className="p-4 text-[10px] font-bold text-[#000000] uppercase tracking-widest cursor-pointer hover:bg-black/5 transition-colors"
-                            >
-                              <div className="flex items-center gap-1.5">
-                                <span>Date & Time</span>
-                                {orderSortField === "date" ? (
-                                  orderSortOrder === "asc" ? (
-                                    <ArrowUp className="w-3 h-3 text-[#35617C]" />
-                                  ) : (
-                                    <ArrowDown className="w-3 h-3 text-[#35617C]" />
-                                  )
-                                ) : (
-                                  <ArrowUpDown className="w-3 h-3 text-black/30" />
-                                )}
-                              </div>
+                            <th className="p-4 text-[10px] font-bold text-[#000000] uppercase tracking-widest">
+                              Date &amp; Time
                             </th>
-                            <th
-                              onClick={() => {
-                                if (orderSortField === "name") {
-                                  setOrderSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
-                                } else {
-                                  setOrderSortField("name");
-                                  setOrderSortOrder("asc");
-                                }
-                              }}
-                              className="p-4 text-[10px] font-bold text-[#000000] uppercase tracking-widest cursor-pointer hover:bg-black/5 transition-colors"
-                            >
-                              <div className="flex items-center gap-1.5">
-                                <span>Customer Name</span>
-                                {orderSortField === "name" ? (
-                                  orderSortOrder === "asc" ? (
-                                    <ArrowUp className="w-3 h-3 text-[#35617C]" />
-                                  ) : (
-                                    <ArrowDown className="w-3 h-3 text-[#35617C]" />
-                                  )
-                                ) : (
-                                  <ArrowUpDown className="w-3 h-3 text-black/30" />
-                                )}
-                              </div>
+                            <th className="p-4 text-[10px] font-bold text-[#000000] uppercase tracking-widest">
+                              Customer Name
                             </th>
                             <th className="p-4 text-[10px] font-bold text-[#000000] uppercase tracking-widest">
                               Mobile Number
@@ -4273,53 +4802,11 @@ export default function POSBilling() {
                             <th className="p-4 text-[10px] font-bold text-[#000000] uppercase tracking-widest">
                               Source
                             </th>
-                            <th
-                              onClick={() => {
-                                if (orderSortField === "total") {
-                                  setOrderSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
-                                } else {
-                                  setOrderSortField("total");
-                                  setOrderSortOrder("desc");
-                                }
-                              }}
-                              className="p-4 text-[10px] font-bold text-[#000000] uppercase tracking-widest cursor-pointer hover:bg-black/5 transition-colors"
-                            >
-                              <div className="flex items-center gap-1.5">
-                                <span>Total Due</span>
-                                {orderSortField === "total" ? (
-                                  orderSortOrder === "asc" ? (
-                                    <ArrowUp className="w-3 h-3 text-[#35617C]" />
-                                  ) : (
-                                    <ArrowDown className="w-3 h-3 text-[#35617C]" />
-                                  )
-                                ) : (
-                                  <ArrowUpDown className="w-3 h-3 text-black/30" />
-                                )}
-                              </div>
+                            <th className="p-4 text-[10px] font-bold text-[#000000] uppercase tracking-widest">
+                              Total Due
                             </th>
-                            <th
-                              onClick={() => {
-                                if (orderSortField === "status") {
-                                  setOrderSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
-                                } else {
-                                  setOrderSortField("status");
-                                  setOrderSortOrder("asc");
-                                }
-                              }}
-                              className="p-4 text-[10px] font-bold text-[#000000] uppercase tracking-widest text-right cursor-pointer hover:bg-black/5 transition-colors"
-                            >
-                              <div className="flex items-center justify-end gap-1.5">
-                                <span>Status</span>
-                                {orderSortField === "status" ? (
-                                  orderSortOrder === "asc" ? (
-                                    <ArrowUp className="w-3 h-3 text-[#35617C]" />
-                                  ) : (
-                                    <ArrowDown className="w-3 h-3 text-[#35617C]" />
-                                  )
-                                ) : (
-                                  <ArrowUpDown className="w-3 h-3 text-black/30" />
-                                )}
-                              </div>
+                            <th className="p-4 text-[10px] font-bold text-[#000000] uppercase tracking-widest text-right">
+                              Status
                             </th>
                           </tr>
                         </thead>
@@ -6056,24 +6543,6 @@ export default function POSBilling() {
                       </option>
                     ))}
                   </select>
-                  <select
-                    value={`${expenseSortField}_${expenseSortOrder}`}
-                    onChange={(e) => {
-                      const [f, o] = e.target.value.split("_") as [any, "asc" | "desc"];
-                      setExpenseSortField(f);
-                      setExpenseSortOrder(o);
-                    }}
-                    className="bg-[#FAFAFA] border border-black/10 rounded-lg px-3 py-2 text-xs font-bold text-[#000000] focus:outline-none focus:border-[#35617C] cursor-pointer"
-                  >
-                    <option value="date_desc">Date: Newest First</option>
-                    <option value="date_asc">Date: Oldest First</option>
-                    <option value="amount_desc">Amount: Highest First</option>
-                    <option value="amount_asc">Amount: Lowest First</option>
-                    <option value="title_asc">Title: A to Z</option>
-                    <option value="title_desc">Title: Z to A</option>
-                    <option value="category_asc">Category: A to Z</option>
-                    <option value="payment_mode_asc">Payment: A to Z</option>
-                  </select>
                   <div className="relative">
                     <Search className="w-3.5 h-3.5 text-black/30 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
@@ -6104,125 +6573,20 @@ export default function POSBilling() {
                   <table className="w-full text-left border-collapse min-w-[720px]">
                     <thead className="bg-[#FAFAFA] border-b border-black/10 select-none">
                       <tr>
-                        <th
-                          onClick={() => {
-                            if (expenseSortField === "date") {
-                              setExpenseSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
-                            } else {
-                              setExpenseSortField("date");
-                              setExpenseSortOrder("desc");
-                            }
-                          }}
-                          className="p-3 text-[10px] font-black text-[#000000] uppercase tracking-wider cursor-pointer hover:bg-black/5 transition-colors"
-                        >
-                          <div className="flex items-center gap-1.5">
-                            <span>Date</span>
-                            {expenseSortField === "date" ? (
-                              expenseSortOrder === "asc" ? (
-                                <ArrowUp className="w-3 h-3 text-[#35617C]" />
-                              ) : (
-                                <ArrowDown className="w-3 h-3 text-[#35617C]" />
-                              )
-                            ) : (
-                              <ArrowUpDown className="w-3 h-3 text-black/30" />
-                            )}
-                          </div>
+                        <th className="p-3 text-[10px] font-black text-[#000000] uppercase tracking-wider">
+                          Date
                         </th>
-                        <th
-                          onClick={() => {
-                            if (expenseSortField === "title") {
-                              setExpenseSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
-                            } else {
-                              setExpenseSortField("title");
-                              setExpenseSortOrder("asc");
-                            }
-                          }}
-                          className="p-3 text-[10px] font-black text-[#000000] uppercase tracking-wider cursor-pointer hover:bg-black/5 transition-colors"
-                        >
-                          <div className="flex items-center gap-1.5">
-                            <span>Expense</span>
-                            {expenseSortField === "title" ? (
-                              expenseSortOrder === "asc" ? (
-                                <ArrowUp className="w-3 h-3 text-[#35617C]" />
-                              ) : (
-                                <ArrowDown className="w-3 h-3 text-[#35617C]" />
-                              )
-                            ) : (
-                              <ArrowUpDown className="w-3 h-3 text-black/30" />
-                            )}
-                          </div>
+                        <th className="p-3 text-[10px] font-black text-[#000000] uppercase tracking-wider">
+                          Expense
                         </th>
-                        <th
-                          onClick={() => {
-                            if (expenseSortField === "category") {
-                              setExpenseSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
-                            } else {
-                              setExpenseSortField("category");
-                              setExpenseSortOrder("asc");
-                            }
-                          }}
-                          className="p-3 text-[10px] font-black text-[#000000] uppercase tracking-wider cursor-pointer hover:bg-black/5 transition-colors"
-                        >
-                          <div className="flex items-center gap-1.5">
-                            <span>Category</span>
-                            {expenseSortField === "category" ? (
-                              expenseSortOrder === "asc" ? (
-                                <ArrowUp className="w-3 h-3 text-[#35617C]" />
-                              ) : (
-                                <ArrowDown className="w-3 h-3 text-[#35617C]" />
-                              )
-                            ) : (
-                              <ArrowUpDown className="w-3 h-3 text-black/30" />
-                            )}
-                          </div>
+                        <th className="p-3 text-[10px] font-black text-[#000000] uppercase tracking-wider">
+                          Category
                         </th>
-                        <th
-                          onClick={() => {
-                            if (expenseSortField === "payment_mode") {
-                              setExpenseSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
-                            } else {
-                              setExpenseSortField("payment_mode");
-                              setExpenseSortOrder("asc");
-                            }
-                          }}
-                          className="p-3 text-[10px] font-black text-[#000000] uppercase tracking-wider cursor-pointer hover:bg-black/5 transition-colors"
-                        >
-                          <div className="flex items-center gap-1.5">
-                            <span>Paid via</span>
-                            {expenseSortField === "payment_mode" ? (
-                              expenseSortOrder === "asc" ? (
-                                <ArrowUp className="w-3 h-3 text-[#35617C]" />
-                              ) : (
-                                <ArrowDown className="w-3 h-3 text-[#35617C]" />
-                              )
-                            ) : (
-                              <ArrowUpDown className="w-3 h-3 text-black/30" />
-                            )}
-                          </div>
+                        <th className="p-3 text-[10px] font-black text-[#000000] uppercase tracking-wider">
+                          Paid via
                         </th>
-                        <th
-                          onClick={() => {
-                            if (expenseSortField === "amount") {
-                              setExpenseSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
-                            } else {
-                              setExpenseSortField("amount");
-                              setExpenseSortOrder("desc");
-                            }
-                          }}
-                          className="p-3 text-[10px] font-black text-[#000000] uppercase tracking-wider text-right cursor-pointer hover:bg-black/5 transition-colors"
-                        >
-                          <div className="flex items-center justify-end gap-1.5">
-                            <span>Amount</span>
-                            {expenseSortField === "amount" ? (
-                              expenseSortOrder === "asc" ? (
-                                <ArrowUp className="w-3 h-3 text-[#35617C]" />
-                              ) : (
-                                <ArrowDown className="w-3 h-3 text-[#35617C]" />
-                              )
-                            ) : (
-                              <ArrowUpDown className="w-3 h-3 text-black/30" />
-                            )}
-                          </div>
+                        <th className="p-3 text-[10px] font-black text-[#000000] uppercase tracking-wider text-right">
+                          Amount
                         </th>
                         <th className="p-3 text-[10px] font-black text-[#000000] uppercase tracking-wider text-center">
                           Action
@@ -6317,7 +6681,7 @@ export default function POSBilling() {
                   Inventory
                 </h2>
                 <p className="text-xs text-[#000000] font-semibold mt-1">
-                  Manage products — add, edit, delete, GST & pricing.
+                  Manage products and categories — add, edit and delete.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
@@ -6331,26 +6695,22 @@ export default function POSBilling() {
                     onChange={(e) => setInventorySearch(e.target.value)}
                   />
                 </div>
-                <select
-                  value={`${inventorySortField}_${inventorySortOrder}`}
-                  onChange={(e) => {
-                    const [f, o] = e.target.value.split("_") as [any, "asc" | "desc"];
-                    setInventorySortField(f);
-                    setInventorySortOrder(o);
-                  }}
-                  className="bg-white border border-black/10 rounded-lg px-3 py-2 text-xs font-bold text-[#000000] focus:outline-none focus:border-[#35617C] cursor-pointer"
-                >
-                  <option value="name_asc">Name: A to Z</option>
-                  <option value="name_desc">Name: Z to A</option>
-                  <option value="price_asc">Price: Low to High</option>
-                  <option value="price_desc">Price: High to Low</option>
-                  <option value="gst_desc">GST: High to Low</option>
-                </select>
                 <button
                   onClick={exportInventoryCSV}
                   className="text-[10px] font-bold text-[#000000] bg-white border border-black/10 hover:bg-[#FAFAFA] px-3 py-2 rounded-lg uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5 text-[#35617C]" /> Inventory CSV
+                </button>
+                <button
+                  onClick={() => {
+                    setNewCategoryName("");
+                    setEditingCategoryId(null);
+                    setEditCategoryName("");
+                    setShowCategoryModal(true);
+                  }}
+                  className="text-[10px] font-bold text-[#35617C] bg-white border border-[#35617C]/40 hover:bg-[#35617C]/10 px-3 py-2 rounded-lg uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Tag className="w-3.5 h-3.5" /> Manage Categories
                 </button>
                 <button
                   onClick={() => {
@@ -6395,77 +6755,11 @@ export default function POSBilling() {
                   <table className="w-full text-left border-collapse min-w-[900px]">
                     <thead className="bg-[#FAFAFA] border-b border-black/10 select-none">
                       <tr>
-                        <th
-                          onClick={() => {
-                            if (inventorySortField === "name") {
-                              setInventorySortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
-                            } else {
-                              setInventorySortField("name");
-                              setInventorySortOrder("asc");
-                            }
-                          }}
-                          className="p-3 text-[10px] font-black text-[#000000] uppercase tracking-wider cursor-pointer hover:bg-black/5 transition-colors"
-                        >
-                          <div className="flex items-center gap-1.5">
-                            <span>Product</span>
-                            {inventorySortField === "name" ? (
-                              inventorySortOrder === "asc" ? (
-                                <ArrowUp className="w-3 h-3 text-[#35617C]" />
-                              ) : (
-                                <ArrowDown className="w-3 h-3 text-[#35617C]" />
-                              )
-                            ) : (
-                              <ArrowUpDown className="w-3 h-3 text-black/30" />
-                            )}
-                          </div>
+                        <th className="p-3 text-[10px] font-black text-[#000000] uppercase tracking-wider">
+                          Product
                         </th>
-                        <th
-                          onClick={() => {
-                            if (inventorySortField === "price") {
-                              setInventorySortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
-                            } else {
-                              setInventorySortField("price");
-                              setInventorySortOrder("asc");
-                            }
-                          }}
-                          className="p-3 text-[10px] font-black text-[#000000] uppercase tracking-wider text-right cursor-pointer hover:bg-black/5 transition-colors"
-                        >
-                          <div className="flex items-center justify-end gap-1.5">
-                            <span>Price</span>
-                            {inventorySortField === "price" ? (
-                              inventorySortOrder === "asc" ? (
-                                <ArrowUp className="w-3 h-3 text-[#35617C]" />
-                              ) : (
-                                <ArrowDown className="w-3 h-3 text-[#35617C]" />
-                              )
-                            ) : (
-                              <ArrowUpDown className="w-3 h-3 text-black/30" />
-                            )}
-                          </div>
-                        </th>
-                        <th
-                          onClick={() => {
-                            if (inventorySortField === "gst") {
-                              setInventorySortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
-                            } else {
-                              setInventorySortField("gst");
-                              setInventorySortOrder("desc");
-                            }
-                          }}
-                          className="p-3 text-[10px] font-black text-[#000000] uppercase tracking-wider text-center cursor-pointer hover:bg-black/5 transition-colors"
-                        >
-                          <div className="flex items-center justify-center gap-1.5">
-                            <span>GST %</span>
-                            {inventorySortField === "gst" ? (
-                              inventorySortOrder === "asc" ? (
-                                <ArrowUp className="w-3 h-3 text-[#35617C]" />
-                              ) : (
-                                <ArrowDown className="w-3 h-3 text-[#35617C]" />
-                              )
-                            ) : (
-                              <ArrowUpDown className="w-3 h-3 text-black/30" />
-                            )}
-                          </div>
+                        <th className="p-3 text-[10px] font-black text-[#000000] uppercase tracking-wider text-right">
+                          Price
                         </th>
                         <th className="p-3 text-[10px] font-black text-[#000000] uppercase tracking-wider text-right">
                           Actions
@@ -6527,11 +6821,6 @@ export default function POSBilling() {
                                         {p.desc}
                                       </div>
                                     )}
-                                    {p.hsnCode && (
-                                      <div className="text-[9px] font-bold text-[#000000]/40 mt-0.5 uppercase tracking-wider">
-                                        HSN {p.hsnCode}
-                                      </div>
-                                    )}
                                   </div>
                                 </div>
                               </td>
@@ -6540,9 +6829,6 @@ export default function POSBilling() {
                                 {(p.price ?? 0).toLocaleString(undefined, {
                                   minimumFractionDigits: 2,
                                 })}
-                              </td>
-                              <td className="p-3 text-center text-sm font-bold text-[#000000]/70">
-                                {p.gstRate ?? 0}%
                               </td>
                               <td className="p-3 text-right">
                                 <div
@@ -6594,7 +6880,7 @@ export default function POSBilling() {
                             </tr>
                             {isExpanded && (
                               <tr className="bg-[#FAFAFA] border-b border-black/5">
-                                <td colSpan={4} className="p-4">
+                                <td colSpan={3} className="p-4">
                                   <div className="bg-white border border-black/10 rounded-xl p-4 shadow-sm">
                                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 mb-3 border-b border-black/5">
                                       <div className="flex items-center gap-2">
@@ -6618,7 +6904,7 @@ export default function POSBilling() {
                                         </button>
                                       </div>
                                     </div>
-                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-xs">
                                       <div>
                                         <div className="text-[9px] font-bold text-black/40 uppercase tracking-wider mb-0.5">
                                           Selling Price
@@ -6632,22 +6918,6 @@ export default function POSBilling() {
                                       </div>
                                       <div>
                                         <div className="text-[9px] font-bold text-black/40 uppercase tracking-wider mb-0.5">
-                                          GST Rate
-                                        </div>
-                                        <div className="font-bold text-black">
-                                          {p.gstRate ?? 0}%
-                                        </div>
-                                      </div>
-                                      <div>
-                                        <div className="text-[9px] font-bold text-black/40 uppercase tracking-wider mb-0.5">
-                                          HSN Code
-                                        </div>
-                                        <div className="font-bold text-black">
-                                          {p.hsnCode || "—"}
-                                        </div>
-                                      </div>
-                                      <div>
-                                        <div className="text-[9px] font-bold text-black/40 uppercase tracking-wider mb-0.5">
                                           Category
                                         </div>
                                         <div className="font-bold text-black">
@@ -6655,7 +6925,7 @@ export default function POSBilling() {
                                         </div>
                                       </div>
                                       {p.desc && (
-                                        <div className="col-span-2 sm:col-span-4">
+                                        <div className="col-span-2 sm:col-span-3">
                                           <div className="text-[9px] font-bold text-black/40 uppercase tracking-wider mb-0.5">
                                             Description
                                           </div>
@@ -6675,7 +6945,7 @@ export default function POSBilling() {
                       {filteredInventory.length === 0 && (
                         <tr>
                           <td
-                            colSpan={4}
+                            colSpan={3}
                             className="p-8 text-center text-xs font-semibold text-[#000000]/60"
                           >
                             No products match &quot;{inventorySearch}&quot;.

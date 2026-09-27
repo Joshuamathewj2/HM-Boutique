@@ -34,6 +34,10 @@ export async function createCategory(name: string): Promise<Category> {
   return serialize(await dbStore.addCategory(name.trim()));
 }
 
+export async function renameCategory(id: string, name: string): Promise<Category | null> {
+  return serialize(await dbStore.updateCategory(id, name.trim()));
+}
+
 export async function removeCategory(id: string): Promise<void> {
   return await dbStore.deleteCategory(id);
 }
@@ -85,6 +89,8 @@ export async function submitOrder(payload: {
   deliveryFee: number;
   grandTotal: number;
   cashReceived: number;
+  splitCash?: number;
+  splitGpay?: number;
   paymentMode: PaymentMode;
 }): Promise<{ orderId: string }> {
   return await dbStore.submitOrder(payload);
