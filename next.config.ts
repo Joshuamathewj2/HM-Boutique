@@ -1,7 +1,15 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  async redirects() {
+    return [
+      {
+        source: "/",
+        destination: "/pos/admin/secure/control-panel/ss-creatives",
+        permanent: false,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

@@ -1,0 +1,9 @@
+{
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "/pos/admin/secure/control-panel/ss-creatives",
+      "permanent": false
+    }
+  ]
+}

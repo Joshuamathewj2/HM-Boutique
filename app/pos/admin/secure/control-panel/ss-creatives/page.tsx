@@ -2884,265 +2884,262 @@ export default function POSBilling() {
 
       {/* Collapsible Left Sidebar */}
       <aside
-        className={`fixed lg:sticky top-0 bottom-0 left-0 bg-[#F500A0] text-[#FFFFFF] flex flex-col justify-between h-screen shrink-0 shadow-2xl z-40 transition-all duration-300 ease-in-out ${isSidebarOpen ? "w-64 border-r border-white/20 translate-x-0" : "w-0 min-w-0 border-r-0 -translate-x-64 overflow-hidden"}`}
+        className={`fixed lg:sticky top-0 bottom-0 left-0 bg-[#F500A0] text-[#FFFFFF] flex flex-col h-screen max-h-screen shrink-0 shadow-2xl z-40 transition-all duration-300 ease-in-out ${isSidebarOpen ? "w-64 border-r border-white/20 translate-x-0" : "w-0 min-w-0 border-r-0 -translate-x-64 overflow-hidden"}`}
       >
-        <div className="w-64 flex flex-col justify-between h-full shrink-0 overflow-hidden relative">
-          <div className="flex flex-col">
-            {/* Header branding */}
-            <div className="p-6 border-b border-white/20 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <img
-                  src="/logo.png"
-                  alt="HM Boutique"
-                  className="w-10 h-10 rounded-xl object-cover flex-shrink-0"
-                />
-                <div>
-                  <span className="font-black text-sm tracking-tight text-[#FFFFFF] block leading-tight">
-                    HM BOUTIQUE
-                  </span>
-                  <span className="text-[9px] text-white/80 font-bold tracking-wider block mt-0.5">
-                    School of Fashion Designing & Tailoring
-                  </span>
-                </div>
+        <div className="w-64 flex flex-col h-full shrink-0 overflow-hidden relative">
+          {/* Header branding - Fixed Static Header */}
+          <div className="flex-shrink-0 p-5 border-b border-white/20 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <img
+                src="/logo.png"
+                alt="HM Boutique"
+                className="w-10 h-10 rounded-xl object-cover flex-shrink-0"
+              />
+              <div>
+                <span className="font-black text-sm tracking-tight text-[#FFFFFF] block leading-tight">
+                  HM BOUTIQUE
+                </span>
+                <span className="text-[9px] text-white/80 font-bold tracking-wider block mt-0.5">
+                  School of Fashion Designing & Tailoring
+                </span>
               </div>
-
-              {/* Close Button Inside Sidebar */}
-              <button
-                onClick={() => setIsSidebarOpen(false)}
-                className="w-8 h-8 rounded-lg hover:bg-white/20 flex items-center justify-center text-white font-bold hover:text-white transition-all cursor-pointer"
-                title="Close Menu"
-              >
-                <X className="w-5 h-5" />
-              </button>
             </div>
 
-            {/* Navigation Links */}
-            <nav className="px-4 py-6 space-y-2">
+            {/* Close Button Inside Sidebar (Mobile) */}
+            <button
+              onClick={() => setIsSidebarOpen(false)}
+              className="w-8 h-8 rounded-lg hover:bg-white/20 flex items-center justify-center text-white font-bold hover:text-white transition-all cursor-pointer lg:hidden"
+              title="Close Menu"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Navigation Links - Independently Scrollable */}
+          <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1.5 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
+            <button
+              onClick={() => {
+                setActiveTab("billing");
+                setCompletedBillData(null);
+                if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
+                window.scrollTo({ top: 0, behavior: "instant" });
+              }}
+              className={`w-full flex items-center gap-3.5 px-3.5 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer ${
+                activeTab === "billing"
+                  ? "bg-white text-[#27272A] shadow-md"
+                  : "text-white/90 hover:bg-white/20 hover:text-white"
+              }`}
+            >
+              <Receipt className="w-5 h-5 shrink-0" />
+              Billing Panel
+            </button>
+            <button
+              onClick={() => {
+                setActiveTab("advance");
+                setCompletedBillData(null);
+                if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
+                window.scrollTo({ top: 0, behavior: "instant" });
+              }}
+              className={`w-full flex items-center gap-3.5 px-3.5 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer relative ${
+                activeTab === "advance"
+                  ? "bg-white text-[#27272A] shadow-md"
+                  : "text-white/90 hover:bg-white/20 hover:text-white"
+              }`}
+            >
+              <Clock className="w-5 h-5 shrink-0" />
+              Advance Orders
+              {advanceOrders.filter((a) => a.status === "PENDING" || a.status === "READY").length > 0 && (
+                <span className="ml-auto min-w-[22px] h-[22px] px-1.5 rounded-full text-[10px] font-black flex items-center justify-center bg-[#F59E0B] text-white">
+                  {advanceOrders.filter((a) => a.status === "PENDING" || a.status === "READY").length}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => {
+                setActiveTab("orders");
+                setCompletedBillData(null);
+                if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
+                window.scrollTo({ top: 0, behavior: "instant" });
+              }}
+              className={`w-full flex items-center gap-3.5 px-3.5 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer ${
+                activeTab === "orders"
+                  ? "bg-white text-[#27272A] shadow-md"
+                  : "text-white/90 hover:bg-white/20 hover:text-white"
+              }`}
+            >
+              <History className="w-5 h-5 shrink-0" />
+              Order History
+            </button>
+            {role === "admin" && (
               <button
                 onClick={() => {
-                  setActiveTab("billing");
+                  setActiveTab("inventory");
                   setCompletedBillData(null);
                   if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
                   window.scrollTo({ top: 0, behavior: "instant" });
                 }}
-                className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer ${
-                  activeTab === "billing"
+                className={`w-full flex items-center gap-3.5 px-3.5 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer ${
+                  activeTab === "inventory"
                     ? "bg-white text-[#27272A] shadow-md"
                     : "text-white/90 hover:bg-white/20 hover:text-white"
                 }`}
               >
-                <Receipt className="w-5 h-5 shrink-0" />
-                Billing Panel
+                <Boxes className="w-5 h-5 shrink-0" />
+                Inventory
               </button>
+            )}
+            {role === "admin" && (
               <button
                 onClick={() => {
-                  setActiveTab("advance");
+                  setActiveTab("attendance");
                   setCompletedBillData(null);
                   if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
                   window.scrollTo({ top: 0, behavior: "instant" });
                 }}
-                className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer relative ${
-                  activeTab === "advance"
+                className={`w-full flex items-center gap-3.5 px-3.5 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer ${
+                  activeTab === "attendance"
                     ? "bg-white text-[#27272A] shadow-md"
                     : "text-white/90 hover:bg-white/20 hover:text-white"
                 }`}
               >
-                <Clock className="w-5 h-5 shrink-0" />
-                Advance Orders
-                {advanceOrders.filter((a) => a.status === "PENDING" || a.status === "READY").length > 0 && (
-                  <span className="ml-auto min-w-[22px] h-[22px] px-1.5 rounded-full text-[10px] font-black flex items-center justify-center bg-[#F59E0B] text-white">
-                    {advanceOrders.filter((a) => a.status === "PENDING" || a.status === "READY").length}
+                <UserCheck className="w-5 h-5 shrink-0" />
+                Attendance
+              </button>
+            )}
+            <button
+              onClick={() => {
+                setActiveTab("work_allocation");
+                setCompletedBillData(null);
+                if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
+                window.scrollTo({ top: 0, behavior: "instant" });
+              }}
+              className={`w-full flex items-center gap-3.5 px-3.5 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer ${
+                activeTab === "work_allocation"
+                  ? "bg-white text-[#27272A] shadow-md"
+                  : "text-white/90 hover:bg-white/20 hover:text-white"
+              }`}
+            >
+              <ClipboardList className="w-5 h-5 shrink-0" />
+              Work Allocation
+            </button>
+            {role === "admin" && (
+              <button
+                onClick={() => {
+                  setActiveTab("coupons");
+                  setCompletedBillData(null);
+                  if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
+                  window.scrollTo({ top: 0, behavior: "instant" });
+                }}
+                className={`w-full flex items-center gap-3.5 px-3.5 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer ${
+                  activeTab === "coupons"
+                    ? "bg-white text-[#27272A] shadow-md"
+                    : "text-white/90 hover:bg-white/20 hover:text-white"
+                }`}
+              >
+                <Tag className="w-5 h-5 shrink-0" />
+                Coupons
+              </button>
+            )}
+            {role === "admin" && (
+              <button
+                onClick={() => {
+                  setActiveTab("analytics");
+                  setCompletedBillData(null);
+                  if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
+                  window.scrollTo({ top: 0, behavior: "instant" });
+                }}
+                className={`w-full flex items-center gap-3.5 px-3.5 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer ${
+                  activeTab === "analytics"
+                    ? "bg-white text-[#27272A] shadow-md"
+                    : "text-white/90 hover:bg-white/20 hover:text-white"
+                }`}
+              >
+                <BarChart2 className="w-5 h-5 shrink-0" />
+                Analytics Dashboard
+              </button>
+            )}
+            {role === "admin" && (
+              <button
+                onClick={() => {
+                  setActiveTab("expenses");
+                  setCompletedBillData(null);
+                  if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
+                  window.scrollTo({ top: 0, behavior: "instant" });
+                }}
+                className={`w-full flex items-center gap-3.5 px-3.5 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer ${
+                  activeTab === "expenses"
+                    ? "bg-white text-[#27272A] shadow-md"
+                    : "text-white/90 hover:bg-white/20 hover:text-white"
+                }`}
+              >
+                <Wallet className="w-5 h-5 shrink-0" />
+                Expense Tracker
+              </button>
+            )}
+            {role === "admin" && (
+              <button
+                onClick={() => {
+                  setActiveTab("outstanding_credits");
+                  setCompletedBillData(null);
+                  if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
+                  window.scrollTo({ top: 0, behavior: "instant" });
+                }}
+                className={`w-full flex items-center gap-3.5 px-3.5 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer relative ${
+                  activeTab === "outstanding_credits"
+                    ? "bg-white text-[#27272A] shadow-md"
+                    : "text-white/90 hover:bg-white/20 hover:text-white"
+                }`}
+              >
+                <CreditCard className="w-5 h-5 shrink-0" />
+                Outstanding Credits
+                {orders.filter((o: any) => (o.is_credit || o.payment_mode === "CREDIT" || o.credit_status) && o.credit_status !== "paid").length > 0 && (
+                  <span className="ml-auto min-w-[22px] h-[22px] px-1.5 rounded-full text-[10px] font-black flex items-center justify-center bg-white text-[#F500A0] shadow-xs">
+                    {orders.filter((o: any) => (o.is_credit || o.payment_mode === "CREDIT" || o.credit_status) && o.credit_status !== "paid").length}
                   </span>
                 )}
               </button>
+            )}
+            {role === "admin" && (
               <button
                 onClick={() => {
-                  setActiveTab("orders");
+                  setActiveTab("store_settings");
                   setCompletedBillData(null);
                   if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
                   window.scrollTo({ top: 0, behavior: "instant" });
                 }}
-                className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer ${
-                  activeTab === "orders"
+                className={`w-full flex items-center gap-3.5 px-3.5 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer ${
+                  activeTab === "store_settings"
                     ? "bg-white text-[#27272A] shadow-md"
                     : "text-white/90 hover:bg-white/20 hover:text-white"
                 }`}
               >
-                <History className="w-5 h-5 shrink-0" />
-                Order History
+                <Store className="w-5 h-5 shrink-0" />
+                Store Settings
               </button>
-              {role === "admin" && (
-                <button
-                  onClick={() => {
-                    setActiveTab("inventory");
-                    setCompletedBillData(null);
-                    if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
-                    window.scrollTo({ top: 0, behavior: "instant" });
-                  }}
-                  className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer ${
-                    activeTab === "inventory"
-                      ? "bg-white text-[#27272A] shadow-md"
-                      : "text-white/90 hover:bg-white/20 hover:text-white"
-                  }`}
-                >
-                  <Boxes className="w-5 h-5 shrink-0" />
-                  Inventory
-                </button>
-              )}
-              {role === "admin" && (
-                <button
-                  onClick={() => {
-                    setActiveTab("attendance");
-                    setCompletedBillData(null);
-                    if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
-                    window.scrollTo({ top: 0, behavior: "instant" });
-                  }}
-                  className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer ${
-                    activeTab === "attendance"
-                      ? "bg-white text-[#27272A] shadow-md"
-                      : "text-white/90 hover:bg-white/20 hover:text-white"
-                  }`}
-                >
-                  <UserCheck className="w-5 h-5 shrink-0" />
-                  Attendance
-                </button>
-              )}
-              <button
-                onClick={() => {
-                  setActiveTab("work_allocation");
-                  setCompletedBillData(null);
-                  if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
-                  window.scrollTo({ top: 0, behavior: "instant" });
-                }}
-                className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer ${
-                  activeTab === "work_allocation"
-                    ? "bg-white text-[#27272A] shadow-md"
-                    : "text-white/90 hover:bg-white/20 hover:text-white"
-                }`}
-              >
-                <ClipboardList className="w-5 h-5 shrink-0" />
-                Work Allocation
-              </button>
-              {role === "admin" && (
-                <button
-                  onClick={() => {
-                    setActiveTab("coupons");
-                    setCompletedBillData(null);
-                    if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
-                    window.scrollTo({ top: 0, behavior: "instant" });
-                  }}
-                  className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer ${
-                    activeTab === "coupons"
-                      ? "bg-white text-[#27272A] shadow-md"
-                      : "text-white/90 hover:bg-white/20 hover:text-white"
-                  }`}
-                >
-                  <Tag className="w-5 h-5 shrink-0" />
-                  Coupons
-                </button>
-              )}
-              {role === "admin" && (
-                <button
-                  onClick={() => {
-                    setActiveTab("analytics");
-                    setCompletedBillData(null);
-                    if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
-                    window.scrollTo({ top: 0, behavior: "instant" });
-                  }}
-                  className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer ${
-                    activeTab === "analytics"
-                      ? "bg-white text-[#27272A] shadow-md"
-                      : "text-white/90 hover:bg-white/20 hover:text-white"
-                  }`}
-                >
-                  <BarChart2 className="w-5 h-5 shrink-0" />
-                  Analytics Dashboard
-                </button>
-              )}
-              {role === "admin" && (
-                <button
-                  onClick={() => {
-                    setActiveTab("expenses");
-                    setCompletedBillData(null);
-                    if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
-                    window.scrollTo({ top: 0, behavior: "instant" });
-                  }}
-                  className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer ${
-                    activeTab === "expenses"
-                      ? "bg-white text-[#27272A] shadow-md"
-                      : "text-white/90 hover:bg-white/20 hover:text-white"
-                  }`}
-                >
-                  <Wallet className="w-5 h-5 shrink-0" />
-                  Expense Tracker
-                </button>
-              )}
-              {role === "admin" && (
-                <button
-                  onClick={() => {
-                    setActiveTab("outstanding_credits");
-                    setCompletedBillData(null);
-                    if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
-                    window.scrollTo({ top: 0, behavior: "instant" });
-                  }}
-                  className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer relative ${
-                    activeTab === "outstanding_credits"
-                      ? "bg-white text-[#27272A] shadow-md"
-                      : "text-white/90 hover:bg-white/20 hover:text-white"
-                  }`}
-                >
-                  <CreditCard className="w-5 h-5 shrink-0" />
-                  Outstanding Credits
-                  {orders.filter((o: any) => (o.is_credit || o.payment_mode === "CREDIT" || o.credit_status) && o.credit_status !== "paid").length > 0 && (
-                    <span className="ml-auto min-w-[22px] h-[22px] px-1.5 rounded-full text-[10px] font-black flex items-center justify-center bg-white text-[#F500A0] shadow-xs">
-                      {orders.filter((o: any) => (o.is_credit || o.payment_mode === "CREDIT" || o.credit_status) && o.credit_status !== "paid").length}
-                    </span>
-                  )}
-                </button>
-              )}
-              {role === "admin" && (
-                <button
-                  onClick={() => {
-                    setActiveTab("store_settings");
-                    setCompletedBillData(null);
-                    if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
-                    window.scrollTo({ top: 0, behavior: "instant" });
-                  }}
-                  className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer ${
-                    activeTab === "store_settings"
-                      ? "bg-white text-[#27272A] shadow-md"
-                      : "text-white/90 hover:bg-white/20 hover:text-white"
-                  }`}
-                >
-                  <Store className="w-5 h-5 shrink-0" />
-                  Store Settings
-                </button>
-              )}
+            )}
+          </nav>
 
-              <div className="pt-4 border-t border-white/20 mt-4">
-                <button
-                  onClick={handleLogout}
-                  className="w-full flex items-center gap-4 px-4 py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider text-white bg-white/10 hover:bg-white/25 hover:shadow-md border border-white/20 transition-all cursor-pointer"
-                >
-                  <LogOut className="w-5 h-5" />
-                  Log Out
-                </button>
+          {/* Bottom Footer Section (Logout + Staff Badge) - Pinned to Bottom */}
+          <div className="flex-shrink-0 p-3 border-t border-white/20 mt-auto bg-[#F500A0] space-y-2">
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider text-white bg-white/10 hover:bg-white/25 hover:shadow-md border border-white/20 transition-all cursor-pointer"
+            >
+              <LogOut className="w-5 h-5 shrink-0" />
+              <span>LOG OUT</span>
+            </button>
+            <div className="p-2.5 rounded-xl bg-white/10 border border-white/20 flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-full bg-white/20 border border-white/30 flex items-center justify-center text-white font-black text-xs uppercase shrink-0">
+                {role === "admin" ? "A" : "S"}
               </div>
-            </nav>
-          </div>
-
-          {/* Footer branding */}
-          <div className="p-5 border-t border-white/20 bg-white/10 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-white/20 border border-white/30 flex items-center justify-center text-white font-black text-xs uppercase">
-              {role === "admin" ? "A" : "S"}
-            </div>
-            <div>
-              <span className="text-xs font-bold text-white block uppercase tracking-wider">
-                {role === "admin" ? "Admin Access" : "Staff Access"}
-              </span>
-              <span className="text-[9px] text-white/80 font-bold tracking-wider block">
-                Powered by Cenexa Systems © 2026
-              </span>
+              <div className="min-w-0">
+                <span className="text-[11px] font-bold text-white block uppercase tracking-wider truncate">
+                  {role === "admin" ? "Admin Access" : "Staff Access"}
+                </span>
+                <span className="text-[9px] text-white/70 block uppercase tracking-wider font-semibold truncate">
+                  Powered by Cenexa Systems
+                </span>
+              </div>
             </div>
           </div>
         </div>
