@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import {
   User,
   Receipt,
@@ -395,6 +396,7 @@ const SearchableItemInput = ({
 };
 
 export default function POSBilling() {
+  const router = useRouter();
   const [isAuthorized, setIsAuthorized] = useState<boolean>(false);
   const [role, setRole] = useState<"staff" | "admin" | null>(null);
   const [passcode, setPasscode] = useState<string>("");
@@ -1004,8 +1006,11 @@ export default function POSBilling() {
     if (isSavingCatalog) return; // ignore double-clicks
     setIsSavingCatalog(true);
     try {
-    if (editingCatalogId) {
-      const data = await editProduct(editingCatalogId, productPayload);
+    const currentItem = catalog.find(c => c.id === editingCatalogId);
+    const targetId = currentItem?.productId || (editingCatalogId && !isNaN(Number(editingCatalogId)) ? editingCatalogId : null);
+
+    if (targetId) {
+      const data = await editProduct(targetId, productPayload);
       if (!data) {
         alert(
           "Product not found — it may have been removed. Refresh and try again.",
@@ -1031,7 +1036,13 @@ export default function POSBilling() {
     } else {
       const product = await createProduct(productPayload);
       const newItem = productToCatalogItem(product);
-      setCatalog([...catalog, newItem]);
+      
+      if (editingCatalogId) {
+        // Editing an unseeded brochure item: replace it in the UI instead of appending
+        setCatalog((prev) => prev.map(c => c.id === editingCatalogId ? newItem : c));
+      } else {
+        setCatalog([...catalog, newItem]);
+      }
 
       if (catalogTargetRowId) {
         updateItem(catalogTargetRowId, "name", product.name);
@@ -1044,6 +1055,7 @@ export default function POSBilling() {
       }
 
       resetCatalogForm();
+      setEditingCatalogId(null);
       setShowCatalogModal(false);
     }
     } finally {
@@ -1230,6 +1242,9 @@ export default function POSBilling() {
       setSplitGpay(0);
       setShowAdvanceSaveModal(false);
       await fetchData();
+      try {
+        router.refresh();
+      } catch {}
 
       // Show a shareable receipt modal (Print / WhatsApp / New Sale).
       setAdvanceReceipt({
@@ -4741,7 +4756,7 @@ export default function POSBilling() {
 
             {/* Rows */}
             <div className="bg-white border border-black/10 rounded-xl overflow-hidden">
-              <div className="hidden md:grid grid-cols-[1.1fr_1.3fr_1.5fr_1.5fr_0.9fr_1.1fr_1.4fr] gap-3 px-4 py-3 border-b border-black/10 text-[10px] font-black uppercase tracking-wider text-[#7C5A52] bg-[#F9FAFB]">
+              <div className="hidden md:grid grid-cols-[1.1fr_1.3fr_1.5fr_1.6fr_1fr_1.4fr_1.4fr] gap-3 px-4 py-3 border-b border-black/10 text-[10px] font-black uppercase tracking-wider text-[#7C5A52] bg-[#F9FAFB]">
                 <span>Deposit ID</span>
                 <span>Customer</span>
                 <span>Product</span>
@@ -4754,7 +4769,7 @@ export default function POSBilling() {
                 const q = advSearchQuery.trim().toLowerCase();
                 const filtered = advanceOrders.filter((a) => {
                   if (!isDateInPeriod(a.created_at, advPeriod, advStartDate, advEndDate)) return false;
-                  if (advStatusFilter !== "ALL" && a.status !== advStatusFilter) return false;
+                  if (advStatusFilter !== "ALL" && (a.status?.toUpperCase() ?? "PENDING") !== advStatusFilter) return false;
                   if (!q) return true;
                   return (
                     a.id.toLowerCase().includes(q) ||
@@ -4780,15 +4795,18 @@ export default function POSBilling() {
                     CANCELLED: "bg-[#FEE2E2] text-[#991B1B] border-[#DC2626]/30",
                   };
                   return (
-                    <div key={a.id} className="grid grid-cols-1 md:grid-cols-[1.1fr_1.3fr_1.5fr_1.5fr_0.9fr_1.1fr_1.4fr] gap-3 px-4 py-3 border-b border-black/5 items-center text-xs hover:bg-[#FAFAFA]">
+                    <div key={a.id} className="grid grid-cols-1 md:grid-cols-[1.1fr_1.3fr_1.5fr_1.6fr_1fr_1.4fr_1.4fr] gap-3 px-4 py-3 border-b border-black/5 items-center text-xs hover:bg-[#FAFAFA]">
+                      {/* Deposit ID */}
                       <div>
                         <p className="font-mono font-black text-[11px] text-black">{a.id}</p>
                         <p className="text-[9px] font-bold text-[#7C5A52]">{new Date(a.created_at).toLocaleDateString()}</p>
                       </div>
+                      {/* Customer */}
                       <div>
                         <p className="font-black text-black">{a.customer_name}</p>
                         <p className="text-[10px] text-[#7C5A52]">{a.customer_phone}</p>
                       </div>
+                      {/* Product */}
                       <div className="text-[11px]">
                         {a.items.slice(0, 2).map((i) => (
                           <p key={i.id} className="font-bold text-black truncate">
@@ -4799,27 +4817,47 @@ export default function POSBilling() {
                           <p className="text-[10px] text-[#7C5A52]">+{a.items.length - 2} more</p>
                         )}
                       </div>
+                      {/* Total / Paid / Balance */}
                       <div className="text-[11px]">
                         <p className="font-bold text-black">Total: ₹{Number(a.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
                         <p className="text-[#16A34A] font-bold">Paid: ₹{Number(a.deposit_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
                         <p className="text-[#DC2626] font-bold">Balance: ₹{bal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
                       </div>
+                      {/* Delivery */}
                       <div className="text-[11px] font-bold text-[#7C5A52]">
                         {a.delivery_date ? new Date(a.delivery_date).toLocaleDateString() : "—"}
                       </div>
+                      {/* Status — 4-option dropdown */}
                       <div>
-                        <span className={`inline-block px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-wider border ${statusStyles[a.status]}`}>
-                          {a.status}
-                        </span>
-                        {a.status !== "COMPLETED" && a.status !== "CANCELLED" && (
-                          <button
-                            onClick={() => toggleAdvanceReady(a)}
-                            className="block mt-1 text-[9px] font-black uppercase tracking-wider text-[#2563EB] hover:underline cursor-pointer"
-                          >
-                            Mark as {a.status === "READY" ? "Pending" : "Ready"}
-                          </button>
-                        )}
+                        <select
+                          value={a.status}
+                          onChange={async (e) => {
+                            const next = e.target.value as AdvanceOrderStatus;
+                            if (next === "CANCELLED") {
+                              if (!confirm(`Cancel advance order ${a.id}? The deposit is treated as forfeit/refunded outside the system.`)) return;
+                            }
+                            try {
+                              await setAdvanceOrderStatus(a.id, next);
+                              await fetchData();
+                            } catch (err) {
+                              console.error("Status update failed:", err);
+                              alert("Could not update the order status.");
+                            }
+                          }}
+                          className={`w-full text-[10px] font-black uppercase tracking-wider border rounded-lg px-2 py-1.5 cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#F500A0]/30 transition-colors ${
+                            a.status === "PENDING" ? "bg-[#FEF3C7] text-[#78350F] border-[#F59E0B]/40" :
+                            a.status === "READY" ? "bg-[#DBEAFE] text-[#1E3A8A] border-[#2563EB]/40" :
+                            a.status === "COMPLETED" ? "bg-[#DCFCE7] text-[#166534] border-[#16A34A]/40" :
+                            "bg-[#FEE2E2] text-[#991B1B] border-[#DC2626]/40"
+                          }`}
+                        >
+                          <option value="PENDING">Pending</option>
+                          <option value="READY">Ready</option>
+                          <option value="COMPLETED">Completed</option>
+                          <option value="CANCELLED">Cancelled</option>
+                        </select>
                       </div>
+                      {/* Actions — Cancel (X) removed */}
                       <div className="flex items-center justify-end gap-1.5 flex-nowrap">
                         <button onClick={() => shareAdvanceReceiptWhatsApp({
                           id: a.id,
@@ -4850,15 +4888,12 @@ export default function POSBilling() {
                         <button onClick={() => openAdvanceView(a)} title="View details" className="flex items-center justify-center w-8 h-8 bg-black/5 hover:bg-black/10 text-[#000000] rounded-md transition-colors cursor-pointer shrink-0">
                           <Eye className="w-4 h-4" />
                         </button>
-                        {a.status !== "COMPLETED" && a.status !== "CANCELLED" && (
+                        {a.status !== "COMPLETED" && a.status !== "CANCELLED" ? (
                           <button onClick={() => openReceiveBalance(a)} title="Receive balance" className="flex items-center justify-center w-8 h-8 bg-[#10B981]/10 hover:bg-[#10B981]/20 text-[#10B981] rounded-md transition-colors cursor-pointer shrink-0">
                             <IndianRupee className="w-4 h-4" />
                           </button>
-                        )}
-                        {a.status !== "COMPLETED" && a.status !== "CANCELLED" && (
-                          <button onClick={() => doCancelAdvance(a)} title="Cancel" className="flex items-center justify-center w-8 h-8 bg-[#F59E0B]/10 hover:bg-[#F59E0B]/20 text-[#D97706] rounded-md transition-colors cursor-pointer shrink-0">
-                            <X className="w-4 h-4" />
-                          </button>
+                        ) : (
+                          <div className="w-8 h-8 shrink-0" />
                         )}
                         {role === "admin" && (
                           <button onClick={() => doDeleteAdvance(a)} title="Delete" className="flex items-center justify-center w-8 h-8 bg-[#DC2626]/10 hover:bg-[#DC2626]/20 text-[#DC2626] rounded-md transition-colors cursor-pointer shrink-0">

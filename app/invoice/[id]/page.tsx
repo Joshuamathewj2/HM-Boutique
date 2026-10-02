@@ -3,6 +3,8 @@ import { ArrowLeft, FileText } from "lucide-react";
 import Link from "next/link";
 import { InvoiceActions } from "./InvoiceActions";
 
+export const dynamic = "force-dynamic";
+
 // Clean Indian Number-to-Words Converter
 function numberToWords(num: number): string {
   if (!num || num === 0) return "Zero Rupees Only";

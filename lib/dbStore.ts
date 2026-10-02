@@ -25,8 +25,12 @@ const uid = () => {
   return `id-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 };
 
+const isUuid = (val: unknown): boolean =>
+  typeof val === 'string' &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
+
 export const dbStore = {
-  // ── CATEGORIES ──────────────────────────────────────────────────────────
+  // â”€â”€ CATEGORIES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async listCategories(): Promise<Category[]> {
     if (isSupabaseConfigured) {
       try {
@@ -142,7 +146,7 @@ export const dbStore = {
     }
   },
 
-  // ── PRODUCTS ────────────────────────────────────────────────────────────
+  // â”€â”€ PRODUCTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async listProducts(): Promise<Product[]> {
     const isPseudo = (name: string) => {
       const n = (name || '').toLowerCase().trim();
@@ -224,7 +228,7 @@ export const dbStore = {
     return brochureFallback;
   },
 
-  // ── SEED CATALOGUE ───────────────────────────────────────────────────────
+  // â”€â”€ SEED CATALOGUE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   /**
    * Upserts all official course categories + individual pattern items into Supabase.
    * Removes pseudo-packages and sets the exact category fee to every pattern item.
@@ -349,7 +353,7 @@ export const dbStore = {
       low_stock_alert: 5,
       is_active: true,
       item_type: 'service',
-      description: `${item.category} • ${item.duration}`,
+      description: `${item.category} â€¢ ${item.duration}`,
     }));
 
     try {
@@ -590,7 +594,7 @@ export const dbStore = {
     }
   },
 
-  // ── INVENTORY ADJUSTMENT & LOGS ─────────────────────────────────────────
+  // â”€â”€ INVENTORY ADJUSTMENT & LOGS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async adjustStock(input: {
     productId: string | number;
     adjustment: number;
@@ -632,7 +636,7 @@ export const dbStore = {
     }
   },
 
-  // ── CUSTOMERS ───────────────────────────────────────────────────────────
+  // â”€â”€ CUSTOMERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async upsertCustomer(name: string, phone: string, address?: string | null): Promise<Customer> {
     const id = uid();
     try {
@@ -648,7 +652,7 @@ export const dbStore = {
     }
   },
 
-  // ── ORDERS & POS BILLING ────────────────────────────────────────────────
+  // â”€â”€ ORDERS & POS BILLING â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async orderIdExists(id: string): Promise<boolean> {
     if (isSupabaseConfigured) {
       try {
@@ -1145,7 +1149,7 @@ export const dbStore = {
     return { orderId: payload.orderId };
   },
 
-  // ── EXPENSES ────────────────────────────────────────────────────────────
+  // â”€â”€ EXPENSES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async listExpenses(): Promise<Expense[]> {
     if (isSupabaseConfigured) {
       try {
@@ -1303,9 +1307,21 @@ export const dbStore = {
     }
   },
 
-  // ── ADVANCE ORDERS ──────────────────────────────────────────────────────
+  // â”€â”€ ADVANCE ORDERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async listAdvanceOrders(): Promise<AdvanceOrderWithRelations[]> {
+    const mapStatus = (rawStatus: any): AdvanceOrderStatus => {
+      const s = String(rawStatus || '').toLowerCase();
+      if (s === 'completed') return 'COMPLETED';
+      if (s === 'cancelled' || s === 'canceled') return 'CANCELLED';
+      if (s === 'ready' || s === 'ready_for_delivery') return 'READY';
+      return 'PENDING';
+    };
+
     if (isSupabaseConfigured) {
+      const results: AdvanceOrderWithRelations[] = [];
+      const seenIds = new Set<string>();
+
+      // 1. Read from dedicated advance_orders table
       try {
         const { data, error } = await supabase
           .from('advance_orders')
@@ -1313,39 +1329,133 @@ export const dbStore = {
           .order('created_at', { ascending: false });
 
         if (!error && data && data.length > 0) {
-          return data.map((a: any) => ({
-            id: a.deposit_id || String(a.id),
-            customer_id: String(a.id),
-            customer_name: a.customer_name || 'Customer',
-            customer_phone: a.phone || '',
-            customer_address: a.address || null,
-            status: (a.status === 'completed' ? 'COMPLETED' : a.status === 'cancelled' ? 'CANCELLED' : a.status === 'ready_for_delivery' ? 'READY' : 'PENDING') as AdvanceOrderStatus,
-            subtotal: Number(a.total_amount || 0),
-            total_amount: Number(a.total_amount || 0),
-            deposit_amount: Number(a.deposit_amount || 0),
-            deposit_payment_mode: 'CASH' as PaymentMode,
-            delivery_date: a.expected_delivery_date || null,
-            notes: a.remarks || a.description || null,
-            finalized_order_id: null,
-            finalized_at: null,
-            cancelled_at: null,
-            created_at: a.created_at || new Date().toISOString(),
-            items: [
-              {
-                id: `${a.id}-item`,
-                advance_order_id: a.deposit_id || String(a.id),
-                product_id: a.product_id ? String(a.product_id) : null,
-                snapshot_name: a.product_name || 'Tailoring Item',
-                snapshot_desc: a.description || null,
-                snapshot_price: Number(a.total_amount || 0),
-                quantity: 1,
-              },
-            ],
-          }));
+          for (const a of data) {
+            const advId = a.deposit_id || a.depositId || String(a.id);
+            // Track both the logical ID and raw row ID for dedup below
+            seenIds.add(advId);
+            if (a.deposit_id) seenIds.add(String(a.id));
+
+            let parsedItems: any[] = [];
+            if (Array.isArray(a.products) && a.products.length > 0) {
+              parsedItems = a.products;
+            } else if (typeof a.products === 'string' && a.products.trim()) {
+              try { parsedItems = JSON.parse(a.products); } catch {}
+            }
+
+            const items: AdvanceOrderItemRow[] = parsedItems.length > 0
+              ? parsedItems.map((it: any, idx: number) => ({
+                  id: String(it.id || `${a.id}-item-${idx}`),
+                  advance_order_id: advId,
+                  product_id: it.product_id ? String(it.product_id) : null,
+                  snapshot_name: it.name || it.product_name || it.snapshot_name || 'Tailoring Item',
+                  snapshot_desc: it.desc || it.snapshot_desc || null,
+                  snapshot_price: Number(it.price || it.snapshot_price || 0),
+                  quantity: Number(it.qty || it.quantity || 1),
+                }))
+              : [
+                  {
+                    id: `${a.id}-item`,
+                    advance_order_id: advId,
+                    product_id: a.product_id ? String(a.product_id) : null,
+                    snapshot_name: a.product_name || 'Tailoring Item',
+                    snapshot_desc: a.description || null,
+                    snapshot_price: Number(a.total_amount || 0),
+                    quantity: 1,
+                  },
+                ];
+
+            results.push({
+              id: advId,
+              customer_id: String(a.id),
+              customer_name: a.customer_name || 'Customer',
+              customer_phone: a.phone || a.customer_phone || '',
+              customer_address: a.address || a.customer_address || null,
+              status: mapStatus(a.status),
+              subtotal: Number(a.total_amount || a.subtotal || 0),
+              total_amount: Number(a.total_amount || 0),
+              deposit_amount: Number(a.deposit_amount || 0),
+              deposit_payment_mode: 'CASH' as PaymentMode,
+              delivery_date: a.expected_delivery_date || a.delivery_date || null,
+              notes: a.remarks || a.notes || a.description || null,
+              finalized_order_id: null,
+              finalized_at: a.completed_at || null,
+              cancelled_at: null,
+              created_at: a.created_at || new Date().toISOString(),
+              items,
+            });
+          }
         }
       } catch (err) {
-        console.warn('Supabase listAdvanceOrders failed:', err);
+        console.warn('Supabase advance_orders query failed:', err);
       }
+
+      // 2. Also query orders table for advance orders saved there (runs unconditionally)
+      try {
+        const { data: ordData, error: ordErr } = await supabase
+          .from('orders')
+          .select('*')
+          .or('order_type.eq.ADVANCE,order_type.eq.advance,invoice_no.ilike.DEP-%')
+          .order('created_at', { ascending: false });
+
+        if (!ordErr && ordData && ordData.length > 0) {
+          for (const o of ordData) {
+            const advId = o.invoice_no || String(o.id);
+            if (seenIds.has(advId) || seenIds.has(String(o.id))) continue;
+            seenIds.add(advId);
+
+            let orderItems: any[] = [];
+            if (Array.isArray(o.items)) orderItems = o.items;
+            else if (typeof o.items === 'string') {
+              try { orderItems = JSON.parse(o.items); } catch {}
+            }
+
+            const items: AdvanceOrderItemRow[] = orderItems.map((it: any, idx: number) => ({
+              id: String(it.id || `${o.id}-item-${idx}`),
+              advance_order_id: advId,
+              product_id: it.product_id ? String(it.product_id) : null,
+              snapshot_name: it.name || it.product_name || 'Tailoring Item',
+              snapshot_desc: it.desc || null,
+              snapshot_price: Number(it.price || it.base_price || 0),
+              quantity: Number(it.quantity || it.qty || 1),
+            }));
+
+            const totalAmt = Number(o.total || o.grand_total || o.total_amount || 0);
+            const depAmt = Number(o.amount_paid || o.cash_received || o.deposit_amount || 0);
+
+            results.push({
+              id: advId,
+              customer_id: String(o.user_id || o.id),
+              customer_name: o.customer_name || 'Customer',
+              customer_phone: o.phone || o.customer_phone || '',
+              customer_address: o.address || null,
+              status: mapStatus(o.status),
+              subtotal: Number(o.subtotal || totalAmt),
+              total_amount: totalAmt,
+              deposit_amount: depAmt,
+              deposit_payment_mode: (String(o.payment_mode || 'CASH').toUpperCase()) as PaymentMode,
+              delivery_date: o.delivery_date || o.expected_delivery_date || null,
+              notes: o.notes || o.remarks || null,
+              finalized_order_id: null,
+              finalized_at: null,
+              cancelled_at: null,
+              created_at: o.created_at || new Date().toISOString(),
+              items: items.length > 0 ? items : [{
+                id: `${o.id}-item`,
+                advance_order_id: advId,
+                product_id: null,
+                snapshot_name: 'Tailoring Item',
+                snapshot_desc: null,
+                snapshot_price: totalAmt,
+                quantity: 1,
+              }],
+            });
+          }
+        }
+      } catch {
+        // non-fatal: orders table may not have advance columns yet
+      }
+
+      return results;
     }
 
     try {
@@ -1407,23 +1517,75 @@ export const dbStore = {
   }): Promise<{ advanceOrderId: string }> {
     if (isSupabaseConfigured) {
       try {
-        const remaining = Math.max(0, payload.totalAmount - payload.depositAmount);
         const firstItem = payload.items[0];
+        const structuredItems = payload.items.map((i) => ({
+          name: i.snapshot_name,
+          desc: i.snapshot_desc,
+          price: i.snapshot_price,
+          qty: i.quantity,
+          product_id: i.product_id,
+        }));
 
-        await supabase.from('advance_orders').insert({
+        // Calculate a safe expected delivery date (advance_orders has NOT NULL constraint on expected_delivery_date)
+        let deliveryDateStr = payload.deliveryDate;
+        if (!deliveryDateStr || !deliveryDateStr.trim()) {
+          const d = new Date();
+          d.setDate(d.getDate() + 7);
+          deliveryDateStr = d.toISOString().split('T')[0];
+        }
+
+        // 1. Insert into dedicated advance_orders table
+        // Note: remaining_balance is a GENERATED column in Postgres, so it must NOT be in insert payload.
+        // product_id does NOT exist in advance_orders schema, so it is omitted.
+        const { error: advErr } = await supabase.from('advance_orders').insert({
           deposit_id: payload.advanceOrderId,
-          customer_name: payload.customerName,
-          phone: payload.customerPhone,
-          address: payload.customerAddress || '',
+          customer_name: payload.customerName.trim() || 'Guest',
+          phone: payload.customerPhone.trim() || '',
+          address: payload.customerAddress?.trim() || '',
           product_name: firstItem?.snapshot_name || 'Tailoring Item',
-          product_id: firstItem?.product_id ? Number(firstItem.product_id) : null,
+          products: structuredItems,
           total_amount: payload.totalAmount,
           deposit_amount: payload.depositAmount,
-          remaining_balance: remaining,
-          expected_delivery_date: payload.deliveryDate || null,
+          expected_delivery_date: deliveryDateStr,
           remarks: payload.notes || '',
           status: 'pending_deposit',
         });
+
+        if (advErr) {
+          console.warn('Supabase advance_orders table insert failed:', advErr.message, advErr.details);
+        }
+
+        // 2. Also dual-persist to orders table with all query reconciliation flags:
+        // order_type: 'ADVANCE', invoice_no: DEP-..., status: 'PENDING'
+        try {
+          const { error: ordErr } = await supabase.from('orders').insert({
+            invoice_no: payload.advanceOrderId,
+            customer_name: payload.customerName.trim() || 'Guest',
+            phone: payload.customerPhone.trim() || '',
+            address: payload.customerAddress?.trim() || '',
+            order_mode: 'offline',
+            order_type: 'ADVANCE',
+            status: 'PENDING',
+            subtotal: payload.subtotal,
+            total: payload.totalAmount,
+            discount_amount: 0,
+            manual_discount_amount: 0,
+            total_gst: 0,
+            delivery_charge: 0,
+            payment_mode: payload.depositPaymentMode,
+            payment_method: payload.depositPaymentMode.toLowerCase(),
+            cash_received: payload.depositAmount,
+            notes: payload.notes || null,
+            items: structuredItems,
+            created_at: new Date().toISOString(),
+          });
+          if (ordErr) {
+            console.warn('Supabase orders dual-insert for advance order note:', ordErr.message);
+          }
+        } catch (dualErr) {
+          // non-fatal if table lacks columns
+          console.warn('Supabase orders dual-insert for advance order note:', dualErr);
+        }
 
         return { advanceOrderId: payload.advanceOrderId };
       } catch (err) {
@@ -1472,8 +1634,27 @@ export const dbStore = {
     if (isSupabaseConfigured) {
       try {
         const hmStatus = status === 'COMPLETED' ? 'completed' : status === 'CANCELLED' ? 'cancelled' : status === 'READY' ? 'ready_for_delivery' : 'pending_deposit';
-        await supabase.from('advance_orders').update({ status: hmStatus }).eq('deposit_id', id);
-        return;
+        let qAdv = supabase.from('advance_orders').update({
+          status: hmStatus,
+          ...(status === 'COMPLETED' ? { completed_at: new Date().toISOString() } : {}),
+        });
+        if (isUuid(id)) {
+          qAdv = qAdv.or(`deposit_id.eq.${id},id.eq.${id}`);
+        } else {
+          qAdv = qAdv.eq('deposit_id', id);
+        }
+        await qAdv;
+      } catch {
+        // ignore
+      }
+      try {
+        let qOrd = supabase.from('orders').update({ status });
+        if (isUuid(id)) {
+          qOrd = qOrd.or(`invoice_no.eq.${id},id.eq.${id}`);
+        } else {
+          qOrd = qOrd.eq('invoice_no', id);
+        }
+        await qOrd;
       } catch {
         // ignore
       }
@@ -1489,8 +1670,24 @@ export const dbStore = {
   async cancelAdvanceOrder(id: string): Promise<void> {
     if (isSupabaseConfigured) {
       try {
-        await supabase.from('advance_orders').update({ status: 'cancelled' }).eq('deposit_id', id);
-        return;
+        let qAdv = supabase.from('advance_orders').update({ status: 'cancelled' });
+        if (isUuid(id)) {
+          qAdv = qAdv.or(`deposit_id.eq.${id},id.eq.${id}`);
+        } else {
+          qAdv = qAdv.eq('deposit_id', id);
+        }
+        await qAdv;
+      } catch {
+        // ignore
+      }
+      try {
+        let qOrd = supabase.from('orders').update({ status: 'CANCELLED' });
+        if (isUuid(id)) {
+          qOrd = qOrd.or(`invoice_no.eq.${id},id.eq.${id}`);
+        } else {
+          qOrd = qOrd.eq('invoice_no', id);
+        }
+        await qOrd;
       } catch {
         // ignore
       }
@@ -1510,8 +1707,24 @@ export const dbStore = {
   async deleteAdvanceOrder(id: string): Promise<void> {
     if (isSupabaseConfigured) {
       try {
-        await supabase.from('advance_orders').delete().eq('deposit_id', id);
-        return;
+        let qAdv = supabase.from('advance_orders').delete();
+        if (isUuid(id)) {
+          qAdv = qAdv.or(`deposit_id.eq.${id},id.eq.${id}`);
+        } else {
+          qAdv = qAdv.eq('deposit_id', id);
+        }
+        await qAdv;
+      } catch {
+        // ignore
+      }
+      try {
+        let qOrd = supabase.from('orders').delete();
+        if (isUuid(id)) {
+          qOrd = qOrd.or(`invoice_no.eq.${id},id.eq.${id}`);
+        } else {
+          qOrd = qOrd.eq('invoice_no', id);
+        }
+        await qOrd;
       } catch {
         // ignore
       }
@@ -1582,7 +1795,7 @@ export const dbStore = {
     return { orderId };
   },
 
-  // ── OUTSTANDING CREDITS ───────────────────────────────────────────────────
+  // â”€â”€ OUTSTANDING CREDITS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async markCreditOrderPaid(orderId: string): Promise<void> {
     if (isSupabaseConfigured) {
       try {

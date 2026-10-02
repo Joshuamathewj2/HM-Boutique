@@ -3,6 +3,8 @@ import { ArrowLeft, FileText } from "lucide-react";
 import Link from "next/link";
 import { AdvanceReceiptActions } from "./AdvanceReceiptActions";
 
+export const dynamic = "force-dynamic";
+
 export default async function AdvanceReceiptPage({
   params,
   searchParams,
