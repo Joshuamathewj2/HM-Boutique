@@ -2988,24 +2988,22 @@ export default function POSBilling() {
                 Inventory
               </button>
             )}
-            {role === "admin" && (
-              <button
-                onClick={() => {
-                  setActiveTab("attendance");
-                  setCompletedBillData(null);
-                  if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
-                  window.scrollTo({ top: 0, behavior: "instant" });
-                }}
-                className={`w-full flex items-center gap-3.5 px-3.5 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer ${
-                  activeTab === "attendance"
-                    ? "bg-white text-[#27272A] shadow-md"
-                    : "text-white/90 hover:bg-white/20 hover:text-white"
-                }`}
-              >
-                <UserCheck className="w-5 h-5 shrink-0" />
-                Attendance
-              </button>
-            )}
+            <button
+              onClick={() => {
+                setActiveTab("attendance");
+                setCompletedBillData(null);
+                if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
+                window.scrollTo({ top: 0, behavior: "instant" });
+              }}
+              className={`w-full flex items-center gap-3.5 px-3.5 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer ${
+                activeTab === "attendance"
+                  ? "bg-white text-[#27272A] shadow-md"
+                  : "text-white/90 hover:bg-white/20 hover:text-white"
+              }`}
+            >
+              <UserCheck className="w-5 h-5 shrink-0" />
+              Attendance
+            </button>
             <button
               onClick={() => {
                 setActiveTab("work_allocation");
@@ -7487,9 +7485,9 @@ export default function POSBilling() {
 
         {/* Print Settings Modal */}
                 {/* ATTENDANCE TAB */}
-        {role === "admin" && activeTab === "attendance" && (
+        {activeTab === "attendance" && (
           <div className="max-w-7xl mx-auto w-full pb-8">
-            <Attendance />
+            <Attendance role={role || "staff"} />
           </div>
         )}
 

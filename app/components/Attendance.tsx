@@ -60,7 +60,11 @@ function getMonthRange(yearMonth: string) {
   return { from, to }
 }
 
-export default function Attendance() {
+interface AttendanceProps {
+  role?: 'admin' | 'staff'
+}
+
+export default function Attendance({ role = 'admin' }: AttendanceProps) {
   const [tab, setTab] = useState<'today' | 'staff' | 'report'>('today')
   const [staff, setStaff] = useState<Staff[]>([])
   const [attendanceMap, setAttendanceMap] = useState<Record<string, string>>({})
@@ -68,6 +72,17 @@ export default function Attendance() {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
   const [loading, setLoading] = useState(true)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const [selectedStaffId, setSelectedStaffId] = useState<string>('')
+  const [clockString, setClockString] = useState('')
+
+  useEffect(() => {
+    const updateClock = () => {
+      setClockString(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }))
+    }
+    updateClock()
+    const timer = setInterval(updateClock, 1000)
+    return () => clearInterval(timer)
+  }, [])
 
   // Staff Add / Edit Modal
   const [showModal, setShowModal] = useState(false)
@@ -105,7 +120,12 @@ export default function Attendance() {
 
     try {
       const { data: s } = await supabase.from('staff').select('*').order('name')
-      if (s) setStaff(s as Staff[])
+      if (s) {
+        setStaff(s as Staff[])
+        if (s.length > 0 && !selectedStaffId) {
+          setSelectedStaffId(s[0].id)
+        }
+      }
 
       const { data: a } = await supabase.from('attendance').select('*').eq('date', selectedDate)
       if (a) {
@@ -123,7 +143,7 @@ export default function Attendance() {
     } finally {
       setLoading(false)
     }
-  }, [selectedDate])
+  }, [selectedDate, selectedStaffId])
 
   const fetchReport = useCallback(async (start: string, end: string) => {
     if (!isSupabaseConfigured) return
@@ -156,7 +176,23 @@ export default function Attendance() {
 
   useEffect(() => {
     void fetchData()
-  }, [fetchData])
+    if (!isSupabaseConfigured) return
+
+    // Supabase Realtime Listener on attendance table
+    const channel = supabase
+      .channel('attendance_live_sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance' }, () => {
+        void fetchData()
+        if (tab === 'report') {
+          void fetchReport(filterFrom, filterTo)
+        }
+      })
+      .subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [fetchData, tab, filterFrom, filterTo, fetchReport])
 
   useEffect(() => {
     if (tab === 'report') {
@@ -316,12 +352,14 @@ export default function Attendance() {
       {/* Header & Sub-Tabs */}
       <div className="bg-white rounded-2xl p-5 border border-[#F500A0]/20 shadow-sm flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl sm:text-2xl font-black text-[#111111] flex items-center gap-2.5">
-            <Users className="text-[#F500A0]" size={24} />
-            Staff Attendance &amp; Roster
+          <h2 className="flex items-center gap-2.5 text-[22px] sm:text-[26px] font-black text-[#111111] tracking-tight leading-tight">
+            <span className="w-1.5 h-7 rounded-full bg-[#F500A0] flex-shrink-0 inline-block" />
+            <span>Attendance</span>
           </h2>
-          <p className="text-xs font-semibold text-gray-500 mt-0.5">
-            Daily clock-in, punch register, and monthly payroll attendance tracking
+          <p className="text-xs font-semibold text-gray-500 mt-1">
+            {role === 'admin' 
+              ? 'Daily clock-in register, staff roster, and monthly payroll attendance tracking' 
+              : 'Daily staff attendance check-in, punch register, and monthly attendance log'}
           </p>
         </div>
 
@@ -334,14 +372,16 @@ export default function Attendance() {
           >
             Today's Attendance
           </button>
-          <button
-            onClick={() => setTab('staff')}
-            className={`px-4 py-2 rounded-lg font-bold text-xs transition-colors cursor-pointer ${
-              tab === 'staff' ? 'bg-[#F500A0] text-white shadow-xs' : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Staff Directory ({staff.length})
-          </button>
+          {role === 'admin' && (
+            <button
+              onClick={() => setTab('staff')}
+              className={`px-4 py-2 rounded-lg font-bold text-xs transition-colors cursor-pointer ${
+                tab === 'staff' ? 'bg-[#F500A0] text-white shadow-xs' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Staff Directory ({staff.length})
+            </button>
+          )}
           <button
             onClick={() => setTab('report')}
             className={`px-4 py-2 rounded-lg font-bold text-xs transition-colors cursor-pointer ${
@@ -356,10 +396,142 @@ export default function Attendance() {
       {/* ── TAB: TODAY'S PUNCH REGISTER ── */}
       {tab === 'today' && (
         <div className="space-y-4">
+          {/* Quick Staff Check-in & Punch Card */}
+          <div className="bg-gradient-to-br from-white to-[#FFF0F8] rounded-2xl p-5 sm:p-6 border border-[#F500A0]/20 shadow-md">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+              {/* Date, Time & Staff Selector */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="px-3 py-1 bg-[#F500A0] text-white text-[11px] font-black uppercase tracking-wider rounded-full shadow-xs">
+                    Today
+                  </span>
+                  <span className="text-sm sm:text-base font-black text-[#111111]">
+                    {new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                  </span>
+                  {clockString && (
+                    <span className="text-xs font-mono font-bold text-[#F500A0] bg-white px-2.5 py-0.5 rounded-lg border border-[#F500A0]/30 shadow-xs">
+                      {clockString}
+                    </span>
+                  )}
+                </div>
+
+                {staff.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <label htmlFor="active-staff-select" className="text-xs font-bold text-gray-700 whitespace-nowrap">Staff Member:</label>
+                    <select
+                      id="active-staff-select"
+                      value={selectedStaffId}
+                      onChange={(e) => setSelectedStaffId(e.target.value)}
+                      className="bg-white border border-[#F500A0]/30 rounded-xl px-3 py-1.5 text-xs font-bold text-gray-900 focus:outline-none focus:border-[#F500A0] shadow-2xs"
+                    >
+                      {staff.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} ({s.role})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {/* Status & Clock Actions for Selected Staff */}
+              {selectedStaffId && (
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Status Buttons */}
+                  <div className="inline-flex items-center gap-1 p-1 bg-white rounded-xl border border-[#F500A0]/30 shadow-2xs">
+                    <button
+                      onClick={() => markStatus(selectedStaffId, 'present')}
+                      className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-colors cursor-pointer ${
+                        attendanceMap[selectedStaffId] === 'present'
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'text-emerald-700 hover:bg-emerald-50'
+                      }`}
+                    >
+                      Present
+                    </button>
+                    <button
+                      onClick={() => markStatus(selectedStaffId, 'half_day')}
+                      className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-colors cursor-pointer ${
+                        attendanceMap[selectedStaffId] === 'half_day'
+                          ? 'bg-amber-500 text-white shadow-xs'
+                          : 'text-amber-700 hover:bg-amber-50'
+                      }`}
+                    >
+                      Half Day
+                    </button>
+                    <button
+                      onClick={() => markStatus(selectedStaffId, 'absent')}
+                      className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-colors cursor-pointer ${
+                        attendanceMap[selectedStaffId] === 'absent'
+                          ? 'bg-red-600 text-white shadow-xs'
+                          : 'text-red-700 hover:bg-red-50'
+                      }`}
+                    >
+                      Absent
+                    </button>
+                    <button
+                      onClick={() => markStatus(selectedStaffId, 'leave')}
+                      className={`px-3 py-1.5 rounded-lg font-bold text-xs transition-colors cursor-pointer ${
+                        attendanceMap[selectedStaffId] === 'leave'
+                          ? 'bg-purple-600 text-white shadow-xs'
+                          : 'text-purple-700 hover:bg-purple-50'
+                      }`}
+                    >
+                      Leave
+                    </button>
+                  </div>
+
+                  {/* Clock In / Out Buttons */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => markClock(selectedStaffId, 'clock_in')}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+                        clockMap[selectedStaffId]?.clock_in
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                          : 'bg-[#111111] text-white hover:bg-black shadow-xs'
+                      }`}
+                    >
+                      <LogIn size={14} />
+                      {clockMap[selectedStaffId]?.clock_in
+                        ? `In: ${formatTime(clockMap[selectedStaffId].clock_in)}`
+                        : 'Clock In'}
+                    </button>
+                    <button
+                      onClick={() => markClock(selectedStaffId, 'clock_out')}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+                        clockMap[selectedStaffId]?.clock_out
+                          ? 'bg-purple-100 text-purple-800 border border-purple-300'
+                          : 'bg-[#F500A0] text-white hover:bg-[#D9008F] shadow-xs'
+                      }`}
+                    >
+                      <LogOut size={14} />
+                      {clockMap[selectedStaffId]?.clock_out
+                        ? `Out: ${formatTime(clockMap[selectedStaffId].clock_out)}`
+                        : 'Clock Out'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Status Summary Banner */}
+            {selectedStaffId && attendanceMap[selectedStaffId] && (
+              <div className="mt-4 pt-3 border-t border-[#F500A0]/15 flex items-center gap-2 text-xs font-bold text-emerald-800">
+                <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                <span>
+                  Marked as <span className="uppercase font-black">{attendanceMap[selectedStaffId].replace('_', ' ')}</span> for {selectedDate === new Date().toISOString().split('T')[0] ? 'today' : selectedDate}
+                  {clockMap[selectedStaffId]?.clock_in && ` • Clocked In at ${formatTime(clockMap[selectedStaffId].clock_in)}`}
+                  {clockMap[selectedStaffId]?.clock_out && ` • Clocked Out at ${formatTime(clockMap[selectedStaffId].clock_out)}`}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Attendance Date Filter Bar */}
           <div className="bg-white rounded-2xl p-4 border border-[#F500A0]/15 shadow-sm flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Calendar size={18} className="text-[#F500A0]" />
-              <span className="text-xs font-bold uppercase tracking-wider text-gray-700">Attendance Date:</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-gray-700">Roster Date:</span>
               <input
                 type="date"
                 value={selectedDate}
@@ -368,7 +540,7 @@ export default function Attendance() {
               />
             </div>
             <p className="text-xs text-gray-500 font-semibold">
-              Mark status or record punch times for each staff member
+              Live roster synced across Admin &amp; Staff portals
             </p>
           </div>
 
