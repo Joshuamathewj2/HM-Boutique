@@ -218,10 +218,12 @@ export default async function InvoicePage({
         <div className={`invoice-sheet bg-white mx-auto text-black font-mono leading-tight p-3 ${size === "58" ? "w-[260px]" : "w-[320px]"}`}>
           {/* Thermal Receipt Layout */}
           <div className="text-center pb-3 border-b border-dashed border-black/40 mb-3">
-            <h1 className="text-xl font-bold tracking-tight">SS CREATIVES</h1>
-            <p className="text-[11px] mt-1">55/6, Melaratha Veethi</p>
-            <p className="text-[11px]">Tiruchendur, TN - 628215</p>
-            <p className="text-[11px]">Ph: +91 88072 99918</p>
+            <h1 className="text-xl font-bold tracking-tight">HM BOUTIQUE</h1>
+            <p className="text-[11px] mt-1 font-semibold">HM School of Fashion Designing & Tailoring</p>
+            <p className="text-[11px]">No: 82, Mahalakshmi Nagar, 2nd Main Road</p>
+            <p className="text-[11px]">Adambakkam, Chennai - 600088</p>
+            <p className="text-[11px]">Ph: +91 80560 86113</p>
+            <p className="text-[10px]">Email: malinisuresh6612@gmail.com</p>
             {order.is_gst && <p className="text-[11px] font-bold mt-1">GSTIN: —</p>}
           </div>
           <div className="text-[11px] pb-3 border-b border-dashed border-black/40 mb-3 space-y-1">
@@ -297,20 +299,24 @@ export default async function InvoicePage({
           <div className="flex items-start gap-3.5 sm:gap-4">
             <div className="w-14 h-14 sm:w-16 sm:h-16 shrink-0 rounded-sm border border-zinc-200 overflow-hidden bg-white p-1">
               <img
-                src="/logo.jpeg"
-                alt="SS Creatives"
+                src="/logo.png"
+                alt="HM Boutique"
                 className="w-full h-full object-contain"
               />
             </div>
             <div className="space-y-1">
               <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-zinc-900">
-                SS CREATIVES
+                HM BOUTIQUE
               </h1>
+              <p className="text-xs font-semibold text-[#F500A0]">
+                HM School of Fashion Designing and Tailoring
+              </p>
               <p className="text-xs text-zinc-500 leading-relaxed max-w-xs">
-                55/6, Melaratha Veethi, Tiruchendur, Tamil Nadu - 628215
+                No: 82, Mahalakshmi Nagar, 2nd Main Road, Adambakkam, Chennai - 600088
               </p>
               <div className="text-xs text-zinc-600 pt-1 space-y-0.5">
-                <p>Phone: +91 88072 99918</p>
+                <p>Phone: +91 80560 86113</p>
+                <p>Email: malinisuresh6612@gmail.com</p>
                 {order.is_gst && (
                   <p className="text-zinc-800 font-medium pt-0.5">
                     GSTIN: <span className="font-mono">—</span> • State Code: 33
@@ -578,7 +584,7 @@ export default async function InvoicePage({
         {/* Signatory & Machine Note */}
         <div className="mt-12 pt-6 border-t border-zinc-200 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-6 text-xs">
           <div className="text-[11px] text-zinc-400">
-            Thank you for your visit! • SS Creatives POS
+            Thank you for your visit! • HM Boutique POS • Powered by Cenexa Systems © 2026
           </div>
 
           <div className="sm:text-right space-y-1 self-end">
@@ -586,7 +592,7 @@ export default async function InvoicePage({
             <div className="font-semibold text-zinc-800 text-xs">
               Authorised Signatory
             </div>
-            <div className="text-[10px] text-zinc-400">For SS Creatives</div>
+            <div className="text-[10px] text-zinc-400">For HM Boutique</div>
           </div>
         </div>
         </div>

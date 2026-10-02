@@ -1,17 +1,26 @@
 @import "tailwindcss";
 
 :root {
-  --primary: #35617C;
-  --secondary: #35617C;
-  --tertiary: #9A8C86;
+  --shop-card-rgb: 245 0 160;
+  --shop-accent-rgb: 245 0 160;
+  --shop-soft-rgb: 255 240 248;
+  --shop-tint-rgb: 255 240 248;
+  --shop-deep-rgb: 245 0 160;
+  --shop-on-card: #FFFFFF;
+
+  --primary: #F500A0;
+  --secondary: #F500A0;
+  --tertiary: #FDF2F8;
 }
 
 body {
   font-family: var(--font-poppins), system-ui, -apple-system, "Segoe UI", sans-serif;
   background-color: #FFFFFF;
+  color: #111111;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar in HM Rani Pink */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -20,17 +29,43 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #35617C;
+  background: #F500A0;
   border-radius: 10px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #7C5A52;
+  background: #D8008D;
 }
 
-@layer utilities {
-  .minimal-input {
-    @apply w-full bg-transparent border-b border-black/10 py-2 text-[#000000] focus:outline-none focus:border-[#35617C] transition-colors placeholder:text-[#000000];
-  }
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Utility classes matching HM design tokens */
+.bg-bgMain {
+  background-color: rgb(var(--shop-tint-rgb, 255 240 248)) !important;
+}
+.bg-cardBg {
+  background-color: #FFFFFF !important;
+}
+.border-shopSoft {
+  border-color: rgb(var(--shop-soft-rgb, 255 240 248)) !important;
+}
+
+.minimal-input {
+  width: 100%;
+  background: transparent;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  padding: 0.5rem 0;
+  color: #000000;
+  transition: border-color 0.2s;
+}
+.minimal-input:focus {
+  outline: none;
+  border-bottom-color: #F500A0;
 }
 
 /* Hide number input spin buttons */
@@ -44,9 +79,9 @@ input[type="number"] {
 }
 
 @theme {
-  --color-primary: #35617C;
-  --color-secondary: #35617C;
-  --color-tertiary: #9A8C86;
+  --color-primary: #F500A0;
+  --color-secondary: #F500A0;
+  --color-tertiary: #FDF2F8;
   --animate-float: float 3s ease-in-out infinite;
   --animate-swing: swing 2.5s ease-in-out infinite;
   --animate-pop: pop 2s ease-in-out infinite;
@@ -63,5 +98,40 @@ input[type="number"] {
   @keyframes pop {
     0%, 100% { transform: scale(1); }
     50% { transform: scale(1.1); }
+  }
+}
+
+/* ── PRINT STYLES — A4 & Thermal Invoices ─────────────────────────── */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm;
+  }
+
+  html, body {
+    background: #fff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    color: #000 !important;
+  }
+
+  .print-hidden,
+  .print\:hidden {
+    display: none !important;
+  }
+
+  #invoice-print-root {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  #invoice-print-root * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 }

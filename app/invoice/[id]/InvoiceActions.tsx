@@ -49,10 +49,10 @@ export function InvoiceActions({
   const handleWhatsAppShare = () => {
     if (typeof window !== "undefined") {
       const currentUrl = window.location.href;
-      const cleanPhone = (customerPhone || "").replace(/\D/g, "").slice(-10);
       const invoiceType = isGst ? "Tax Invoice" : "Invoice";
-      const text = `*SS CREATIVES*\n${invoiceType} #${orderId}\nCustomer: ${customerName || "Counter Sale"}\nTotal: ₹${grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}\n\nInvoice Link:\n${currentUrl}`;
+      const text = `*HM BOUTIQUE*\n${invoiceType} #${orderId}\nCustomer: ${customerName || "Counter Sale"}\nTotal: ₹${grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}\n\nInvoice Link:\n${currentUrl}`;
       const encoded = encodeURIComponent(text);
+      const cleanPhone = (customerPhone || "").replace(/\D/g, "").slice(-10);
 
       const url = cleanPhone
         ? `https://api.whatsapp.com/send?phone=91${cleanPhone}&text=${encoded}`

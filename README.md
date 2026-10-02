@@ -1,56 +1,62 @@
-# SS CREATIVES — POS & Inventory Billing System
+# HM BOUTIQUE — School of Fashion Designing & Tailoring POS & ERP System
 
-A PWA-enabled Point of Sale (POS), billing, and inventory management system for **SS CREATIVES**, Tiruchendur. It handles quick invoice generation, WhatsApp delivery of digital receipts, order history, GST / non-GST billing with two revenue dashboards, and stock management with low-stock alerts.
+A PWA-enabled Point of Sale (POS), billing, and tailoring ERP management system for **HM BOUTIQUE / HM School of Fashion Designing and Tailoring**, Adambakkam, Chennai. It handles quick invoice generation, WhatsApp delivery of digital receipts, order history, GST / non-GST billing, attendance tracking, work allocation with progress tracking, coupon management, and stock ledger with audible alarms.
 
 ## Features
 
 ### 🧾 POS Billing Panel
 - Quick invoice generator with a searchable product catalog
 - Add custom items with price and quantity controls
+- Coupon code integration (`WELCOME10`, `FESTIVE15`, `HM20`) with live validation
 - Manual discounts (fixed ₹ or percent %)
 - **GST Invoice / Non-GST Bill toggle** at the point of billing
 - **Changeable GST %** — pre-filled from each product's default GST rate, editable per sale
-- Optional delivery fee
-- Cash payment tracking with auto-calculated change return
+- Payment tender options: Cash, GPay (UPI), Split (Cash + GPay)
 - Backdate support (custom / past bill dates)
-- Online / Offline (POS) order source toggle
 - Send the bill directly to the customer via WhatsApp with a digital invoice link
 
-### 📦 Inventory (Admin only)
-- Full CRUD on products — a pure price list (no stock tracking)
-- Per-product **selling price**, **default GST rate** (used to pre-fill GST at billing), and **HSN code**
-- Export the complete product catalog to CSV
+### 📦 Inventory & Stock Ledger (Admin only)
+- Full catalogue of 221 products across 12 fashion & tailoring categories
+- SKU tracking, low stock alert thresholds, purchase price & selling price
+- Stock adjustment modal (Restock, Damaged/Loss, Customer Return, Audit Correction) with audit logging
+- Visual and audio low stock alarm modal
 
-### 📜 Order History
+### 👥 Staff Attendance
+- Daily punch-in / punch-out with status indicators (Present, Late, Half-day, Absent)
+- Staff roster management (tailors, embroiderers, cutting masters, apprentices)
+- Monthly attendance report with calendar view and CSV export
+- Dedicated self-service kiosk route at `/staff-attendance`
+
+### ✂️ Work Allocation
+- Job creation with physical garment/unit allocation
+- Tailor assignment, priority badges, promised delivery dates
+- Live progress sliders with status updates
+- Overdue task alarm notifications
+
+### 🎟️ Coupon Management
+- Create percentage discount codes with minimum order value and usage limits
+- Live validation directly against Supabase database
+
+### 🏪 Store Settings
+- Edit shop name, proprietor name, contact numbers, email, address, and Instagram profile
+
+### 📜 Order History & Advance Orders
 - Search orders by ID, customer name, or phone number
-- Filter by source (Online / Offline) and status
-- Period filters (All Time, Today, Week, Month, Year, Custom range)
-- View detailed order modal
-- Print / download invoice as PDF
-- Resend invoice via WhatsApp
-- Export filtered orders to CSV (admin only)
-- Delete invoices (admin only)
+- Advance orders module with token deposit holds, balance calculation, and delivery status tracking
+- Thermal (58mm/80mm) and A4/A5 receipt printing
 
-### 📊 Analytics — GST & Non-GST Dashboards (Admin only)
-- Switch the whole dashboard between **All Bills / GST Invoices / Non-GST Bills**
-- KPIs: total revenue, completed bills, online/offline split, items sold, avg order value
-- Today's Sales, monthly & weekly revenue trends
-- Product sales leaderboard with market share
-- Coupon / promo campaign performance tracking
-- Custom period filters and contact/invoice search
-
-### 📱 PWA & Mobile
-- Installable as a standalone app
-- Offline-first service worker with network-first caching
-- Responsive mobile-friendly UI
+### 📊 Analytics Dashboard
+- Total revenue, completed bills, cash vs digital split, average order value
+- Compact charts powered by Recharts
 
 ## Tech Stack
 
 - Next.js 16 (App Router)
 - React 19
 - TypeScript
-- Tailwind CSS v4
-- Neon Serverless PostgreSQL (`@neondatabase/serverless`)
+- Tailwind CSS v4 & custom design tokens
+- Supabase Live Cloud Database (`@supabase/supabase-js`)
+- Recharts
 - lucide-react (icons)
 
 ## Getting Started
@@ -63,19 +69,16 @@ npm install
 
 ### 2. Configure Environment Variables
 
-Create a `.env.local` file in the project root:
+Create a `.env` file in the project root:
 
 ```env
-ADMIN_PASSCODE=your-admin-passcode
-STAFF_PASSCODE=your-staff-passcode
-DATABASE_URL=postgresql://user:password@hostname/dbname?sslmode=require
+ADMIN_PASSCODE=admin123
+STAFF_PASSCODE=staff123
+NEXT_PUBLIC_SUPABASE_URL=https://aybfklpejvsphkxmetpn.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
 ```
 
-### 3. Set up the database
-
-Run `schema.sql` once in your Neon SQL Editor (or `psql`) to create a clean, empty database. Optionally run `seed.sql` afterwards to load some sample mobile-shop data.
-
-### 4. Run the Development Server
+### 3. Run the Development Server
 
 ```bash
 npm run dev
@@ -83,26 +86,14 @@ npm run dev
 
 Open http://localhost:3000.
 
-- Public store page: `/`
-- POS terminal: `/pos/admin/secure/control-panel/raja-mobiles`
+- Public showroom: `/`
+- POS terminal: `/pos/admin/secure/control-panel/ss-creatives`
+- Staff attendance kiosk: `/staff-attendance`
 - Digital invoice: `/invoice/[invoice-id]`
-
-## Data Model
-
-- **products** — master price list. Each product has a `selling_price`, a `gst_rate` (default GST %, editable at billing), and an `hsn_code`.
-- **customers**, **orders**, **order_items** — sales records. `orders.is_gst` flags GST invoices vs non-GST bills, which powers the two revenue dashboards.
-
-See `schema.sql` for the full schema.
-
-## Roles
-
-- **Staff** — Billing Panel, Order History (view-only).
-- **Admin** — Full access, including Inventory CRUD, Analytics, and delete permissions.
-
-The role is determined by which passcode is used to log in.
+- Advance order receipt: `/advance/[advance-id]`
 
 ## License
 
-© 2026 SS CREATIVES. All Rights Reserved.
+© 2026 HM BOUTIQUE. All Rights Reserved.
 
-Powered by [Cenexa Systems](https://www.cenexasystems.com/).
+Powered by [Cenexa Systems](https://www.cenexasystems.com/) © 2026.

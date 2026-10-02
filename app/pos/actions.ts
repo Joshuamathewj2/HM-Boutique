@@ -1,6 +1,8 @@
 "use server";
 
 import { dbStore } from "@/lib/dbStore";
+import { isSupabaseConfigured, supabase } from "@/lib/supabase";
+import { validateCoupon } from "@/lib/services/couponService";
 import { Product, OrderWithRelations, CartItem, Expense, PaymentMode, Category, AdvanceOrderWithRelations, AdvanceOrderStatus } from "@/lib/types";
 
 // Helper to serialize Date objects from Postgres to strings
@@ -47,7 +49,19 @@ export async function fetchProducts(): Promise<Product[]> {
   return serialize(await dbStore.listProducts());
 }
 
-export async function createProduct(data: { name: string; description: string | null; category: string; gst_rate: number; hsn_code: string | null; selling_price: number }): Promise<Product> {
+export async function createProduct(data: {
+  name: string;
+  description: string | null;
+  category: string;
+  gst_rate: number;
+  hsn_code: string | null;
+  selling_price: number;
+  sku?: string;
+  stock_quantity?: number;
+  low_stock_alert?: number;
+  purchase_price?: number;
+  item_type?: 'product' | 'service';
+}): Promise<Product> {
   return serialize(await dbStore.addProduct(data));
 }
 
@@ -57,6 +71,26 @@ export async function editProduct(id: string, data: Partial<Product>): Promise<P
 
 export async function removeProduct(id: string): Promise<void> {
   return await dbStore.deleteProduct(id);
+}
+
+export async function adjustProductStock(data: {
+  productId: string | number;
+  adjustment: number;
+  reason: string;
+  referenceId?: string;
+  oldQuantity: number;
+  newQuantity: number;
+}): Promise<void> {
+  return await dbStore.adjustStock(data);
+}
+
+export async function seedCatalog(): Promise<{
+  categoriesSeeded: number;
+  productsSeeded: number;
+  duplicatesRemoved: number;
+  errors: string[];
+}> {
+  return serialize(await dbStore.seedCatalog());
 }
 
 // Orders
@@ -92,12 +126,24 @@ export async function submitOrder(payload: {
   splitCash?: number;
   splitGpay?: number;
   paymentMode: PaymentMode;
+  couponCode?: string | null;
+  remarks?: string | null;
+  referenceNumber?: string | null;
+  creditDueDate?: string | null;
 }): Promise<{ orderId: string }> {
   return await dbStore.submitOrder(payload);
 }
 
 export async function removeOrder(id: string): Promise<void> {
   return await dbStore.deleteOrder(id);
+}
+
+export async function markCreditOrderPaid(orderId: string): Promise<void> {
+  return await dbStore.markCreditOrderPaid(orderId);
+}
+
+export async function updateCreditDueDate(orderId: string, dueDate: string): Promise<void> {
+  return await dbStore.updateCreditDueDate(orderId, dueDate);
 }
 
 // Expenses
@@ -124,7 +170,7 @@ export async function removeExpense(id: string): Promise<void> {
   return await dbStore.deleteExpense(id);
 }
 
-// Advance Orders (partial-payment holds — not revenue until finalized)
+// Advance Orders (partial-payment holds)
 export async function fetchAdvanceOrders(): Promise<AdvanceOrderWithRelations[]> {
   return serialize(await dbStore.listAdvanceOrders());
 }
@@ -184,4 +230,128 @@ export async function finalizeAdvanceOrder(payload: {
   billDate: string;
 }): Promise<{ orderId: string }> {
   return await dbStore.finalizeAdvanceOrder(payload);
+}
+
+// Coupon validation & management
+export async function checkCoupon(code: string, subtotal: number) {
+  return await validateCoupon(code, subtotal);
+}
+
+export async function fetchCoupons() {
+  if (!isSupabaseConfigured) return [];
+  try {
+    const { data, error } = await supabase
+      .from('coupons')
+      .select('id, code, percentage, is_active, expiry_date, usage_limit, usage_count, min_order_value')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return serialize(data || []);
+  } catch (err) {
+    console.error('Failed to fetch coupons:', err);
+    return [];
+  }
+}
+
+export async function saveCoupon(payload: {
+  id?: number | null;
+  code: string;
+  percentage: number;
+  expiry_date?: string | null;
+  usage_limit?: number | null;
+  min_order_value?: number;
+  is_active?: boolean;
+}) {
+  if (!isSupabaseConfigured) return { success: false, error: 'Database not configured' };
+  try {
+    const dataPayload: any = {
+      percentage: Number(payload.percentage) || 0,
+      expiry_date: payload.expiry_date || null,
+      usage_limit: payload.usage_limit ? Number(payload.usage_limit) : null,
+      min_order_value: Number(payload.min_order_value) || 0,
+    };
+
+    if (payload.id) {
+      if (typeof payload.is_active === 'boolean') dataPayload.is_active = payload.is_active;
+      const { error } = await supabase.from('coupons').update(dataPayload).eq('id', payload.id);
+      if (error) throw error;
+      return { success: true };
+    } else {
+      dataPayload.code = payload.code.toUpperCase().trim();
+      dataPayload.is_active = true;
+      const { error } = await supabase.from('coupons').insert(dataPayload);
+      if (error) throw error;
+      return { success: true };
+    }
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to save coupon' };
+  }
+}
+
+export async function deleteCoupon(id: number) {
+  if (!isSupabaseConfigured) return { success: false, error: 'Database not configured' };
+  try {
+    const { error } = await supabase.from('coupons').delete().eq('id', id);
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to delete coupon' };
+  }
+}
+
+export async function toggleCouponActive(id: number, currentStatus: boolean) {
+  if (!isSupabaseConfigured) return { success: false, error: 'Database not configured' };
+  try {
+    const { error } = await supabase.from('coupons').update({ is_active: !currentStatus }).eq('id', id);
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to toggle coupon' };
+  }
+}
+
+// Store settings
+export async function fetchStoreSettings() {
+  if (!isSupabaseConfigured) return null;
+  try {
+    const { data } = await supabase.from('store_settings').select('*').limit(1).single();
+    return serialize(data);
+  } catch {
+    return null;
+  }
+}
+
+export async function saveStoreSettings(settings: {
+  name: string;
+  ownerName: string;
+  businessType: string;
+  phone: string;
+  shopContact: string;
+  email: string;
+  address: string;
+  instagramId: string;
+  logoUrl?: string;
+  cardColor?: string;
+}) {
+  if (!isSupabaseConfigured) return { success: false, error: 'Database not connected' };
+  try {
+    const payload = {
+      name: settings.name,
+      owner_name: settings.ownerName,
+      business_type: settings.businessType,
+      phone: settings.phone,
+      shop_contact: settings.shopContact,
+      email: settings.email,
+      address: settings.address,
+      instagram_id: settings.instagramId,
+      logo_url: settings.logoUrl || '/logo.png',
+      card_color: settings.cardColor || '#F500A0',
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase.from('store_settings').upsert({ id: 1, ...payload });
+    if (error) throw error;
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to save settings' };
+  }
 }

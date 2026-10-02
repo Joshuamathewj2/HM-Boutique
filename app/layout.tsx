@@ -11,7 +11,7 @@ const poppins = Poppins({
 });
 
 export const viewport: Viewport = {
-  themeColor: "#35617C",
+  themeColor: "#F500A0",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -19,17 +19,17 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "SS CREATIVES - POS",
-  description: "SS CREATIVES Billing, Inventory & Digital Invoices",
+  title: "HM Boutique - POS",
+  description: "HM Boutique Billing, Inventory & Store Management",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "SS CREATIVES",
+    title: "HM Boutique",
   },
   icons: {
-    icon: "/logo.jpeg",
-    apple: "/logo.jpeg",
+    icon: "/logo.png",
+    apple: "/logo.png",
   },
 };
 
@@ -47,10 +47,10 @@ export default function RootLayout({
         <link rel="manifest" href="/manifest.json" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="SS CREATIVES" />
-        <link rel="apple-touch-icon" href="/logo.jpeg" />
+        <meta name="apple-mobile-web-app-title" content="HM Boutique" />
+        <link rel="apple-touch-icon" href="/logo.png" />
       </head>
-      <body className="min-h-full flex flex-col">
+      <body className="min-h-full flex flex-col bg-[#FFF0F8] text-[#111111]">
         {children}
         <PWAHandler />
       </body>

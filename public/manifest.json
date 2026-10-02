@@ -1,24 +1,24 @@
 {
-  "name": "SS CREATIVES - POS",
-  "short_name": "SS CREATIVES",
-  "description": "SS CREATIVES Point of Sale, Billing & Inventory Management",
+  "name": "HM Boutique - POS",
+  "short_name": "HM Boutique",
+  "description": "HM Boutique Point of Sale, Billing & Store Management",
   "start_url": "/pos/admin/secure/control-panel/ss-creatives",
   "display": "standalone",
-  "background_color": "#FFFFFF",
-  "theme_color": "#35617C",
+  "background_color": "#FFF0F8",
+  "theme_color": "#F500A0",
   "orientation": "any",
   "scope": "/",
   "icons": [
     {
-      "src": "/logo.jpeg",
+      "src": "/logo.png",
       "sizes": "any",
-      "type": "image/jpeg",
+      "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/logo.jpeg",
+      "src": "/logo.png",
       "sizes": "512x512",
-      "type": "image/jpeg",
+      "type": "image/png",
       "purpose": "maskable"
     }
   ]

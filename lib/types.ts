@@ -2,6 +2,8 @@ export type Category = {
   id: string;
   name: string;
   created_at: string;
+  is_active?: boolean;
+  sort_order?: number;
 };
 
 export type Product = {
@@ -13,6 +15,19 @@ export type Product = {
   hsn_code: string | null; // HSN/SAC code shown on GST invoices
   selling_price: number; // GST-inclusive catalog price
   created_at: string;
+
+  // HM Boutique Extended Inventory Fields
+  sku?: string;
+  stock_quantity?: number;
+  low_stock_alert?: number;
+  purchase_price?: number;
+  price?: number;
+  offer_price?: number | null;
+  unit?: string;
+  unit_label?: string;
+  item_type?: 'product' | 'service';
+  is_active?: boolean;
+  image_url?: string | null;
 };
 
 export type Customer = {
@@ -23,7 +38,7 @@ export type Customer = {
   created_at: string;
 };
 
-export type PaymentMode = 'CASH' | 'GPAY' | 'SPLIT';
+export type PaymentMode = 'CASH' | 'GPAY' | 'SPLIT' | 'CREDIT';
 
 export type OrderRow = {
   id: string;
@@ -45,6 +60,13 @@ export type OrderRow = {
   payment_mode: PaymentMode;
   bill_date: string;
   created_at: string;
+  coupon_code?: string | null;
+  remarks?: string | null;
+  reference_number?: string | null;
+  is_credit?: boolean;
+  credit_status?: 'outstanding' | 'paid' | null;
+  credit_due_date?: string | null;
+  credit_paid_at?: string | null;
 };
 
 export type OrderItemRow = {
@@ -116,4 +138,6 @@ export type CartItem = {
   desc: string;
   price: number;
   qty: number;
+  sku?: string;
+  unit?: string;
 };
