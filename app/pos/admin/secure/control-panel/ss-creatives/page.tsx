@@ -3215,10 +3215,10 @@ export default function POSBilling() {
                 </div>
                 <button
                   onClick={() => setCompletedBillData(null)}
-                  className="bg-black hover:bg-black/80 text-white px-3.5 py-1.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                  aria-label="Close"
+                  className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:text-black hover:bg-gray-100 transition-colors cursor-pointer"
                 >
-                  <Plus className="w-3.5 h-3.5" />
-                  New Sale
+                  <X className="w-5 h-5" />
                 </button>
               </div>
 
