@@ -26,7 +26,7 @@ export default function StaffWorkAllocationPage() {
           </div>
         </div>
         <Link
-          href="/pos/admin/secure/control-panel/ss-creatives"
+          href="/pos/admin/secure/control-panel/hm-boutique"
           className="flex items-center gap-2 bg-white/15 hover:bg-white/25 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition-colors"
         >
           <ArrowLeft size={14} />

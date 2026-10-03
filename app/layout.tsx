@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Poppins } from "next/font/google";
 import "./globals.css";
 import PWAHandler from "./components/PWAHandler";
+import { ToastHost } from "@/lib/toast";
 
 const poppins = Poppins({
   variable: "--font-poppins",
@@ -51,8 +52,10 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/logo.png" />
       </head>
       <body className="min-h-full flex flex-col bg-[#FFF0F8] text-[#111111]">
+        <div id="print-root" />
         {children}
         <PWAHandler />
+        <ToastHost />
       </body>
     </html>
   );

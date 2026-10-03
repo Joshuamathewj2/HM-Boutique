@@ -161,7 +161,7 @@ export default function StaffPunch({ embedded = false }: { embedded?: boolean })
       {/* Top Header */}
       <div className="w-full max-w-md flex items-center justify-between py-3">
         <Link
-          href="/pos/admin/secure/control-panel/ss-creatives"
+          href="/pos/admin/secure/control-panel/hm-boutique"
           className="inline-flex items-center gap-1.5 text-xs font-bold text-[#F500A0] hover:underline"
         >
           <ArrowLeft size={14} /> Back to Terminal

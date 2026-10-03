@@ -67,7 +67,7 @@ The objective is to transform `/SS-Creatives` into a pixel-faithful **HM BOUTIQU
 1. **`app/globals.css`**: Define CSS variables (`--shop-card-rgb: 245 0 160`, `--shop-tint-rgb: 255 240 248`, `--shop-soft-rgb: 255 240 248`, etc.), custom scrollbar utility (`.hide-scrollbar`), and print styles.
 2. **`app/layout.tsx`**: Update metadata title to "HM Boutique", viewport theme color to `#F500A0`, and icons to `/logo.png`.
 3. **`app/page.tsx`**: Rebrand landing page to HM School of Fashion Designing & Tailoring, owner Malini Suresh, Adambakkam Chennai address, `#F500A0` accents.
-4. **`app/pos/admin/secure/control-panel/ss-creatives/page.tsx`**:
+4. **`app/pos/admin/secure/control-panel/hm-boutique/page.tsx`**:
    - Replace top nav with collapsible left sidebar (`DashboardShell`).
    - Add new tabs: `attendance`, `work_allocation`, `coupons`, `store_settings`.
    - Re-skin billing panel, tables, modals, input rings, and buttons with `#F500A0`.

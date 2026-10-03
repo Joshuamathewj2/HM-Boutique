@@ -1,10 +1,10 @@
-const CACHE_NAME = 'ss-creatives-pos-v1';
+const CACHE_NAME = 'hm-boutique-pos-v1';
 const ASSETS_TO_CACHE = [
   '/',
   '/manifest.json',
   '/logo.png',
   '/icon.png',
-  '/pos/admin/secure/control-panel/ss-creatives'
+  '/pos/admin/secure/control-panel/hm-boutique'
 ];
 
 self.addEventListener('install', (event) => {

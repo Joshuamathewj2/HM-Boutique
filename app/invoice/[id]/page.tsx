@@ -116,7 +116,7 @@ export default async function InvoicePage({
           The requested invoice identifier #{id} could not be found.
         </p>
         <Link
-          href="/pos/admin/secure/control-panel/ss-creatives"
+          href="/pos/admin/secure/control-panel/hm-boutique"
           className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 rounded-md text-white font-medium text-xs transition-colors"
         >
           <ArrowLeft className="w-3.5 h-3.5" /> Back to Dashboard
@@ -124,6 +124,15 @@ export default async function InvoicePage({
       </div>
     );
   }
+
+  const ord: any = order;
+  const isCreditUnsettled =
+    (ord.payment_method === "CREDIT" ||
+      ord.payment_method === "credit" ||
+      String(ord.payment_mode || "").toUpperCase() === "CREDIT" ||
+      Boolean(ord.is_credit)) &&
+    String(ord.status || "").toUpperCase() !== "COMPLETED";
+  const invoiceTitle = isCreditUnsettled ? "CREDIT INVOICE" : "TAX INVOICE";
 
   const grandTotalNum = Number(order.grand_total) || 0;
   const subtotalNum = Number(order.subtotal) || 0;
@@ -135,6 +144,17 @@ export default async function InvoicePage({
   const splitGpayNum = Number(order.split_gpay) || 0;
   const changeReturned =
     cashReceivedNum > grandTotalNum ? cashReceivedNum - grandTotalNum : 0;
+
+  const itemsSubtotal =
+    subtotalNum ||
+    order.items.reduce(
+      (sum, i) => sum + Number(i.snapshot_price) * (i.quantity || 1),
+      0
+    );
+  const taxableValue =
+    order.is_gst && gstAmountNum > 0 && Math.abs(grandTotalNum - (itemsSubtotal - discountNum + deliveryFeeNum)) < 0.05
+      ? itemsSubtotal - discountNum - gstAmountNum
+      : itemsSubtotal - discountNum;
 
   const paymentLabel =
     order.payment_mode === "SPLIT"
@@ -230,7 +250,7 @@ export default async function InvoicePage({
           </div>
           <div className="text-[11px] pb-3 border-b border-dashed border-black/40 mb-3 space-y-1">
             <div className="flex justify-between">
-              <span className="font-bold">{order.is_gst ? "TAX INVOICE" : "INVOICE"}</span>
+              <span className="font-bold">{invoiceTitle}</span>
               <span>#{order.id}</span>
             </div>
             <div className="flex justify-between">
@@ -331,7 +351,7 @@ export default async function InvoicePage({
           <div className="sm:text-right space-y-1.5 shrink-0">
             <div>
               <span className="text-lg font-bold tracking-tight text-zinc-900 uppercase">
-                {order.is_gst ? "Tax Invoice" : "Invoice"}
+                {invoiceTitle === "CREDIT INVOICE" ? "Credit Invoice" : order.is_gst ? "Tax Invoice" : "Invoice"}
               </span>
               <p className="text-xs font-mono text-zinc-500">#{order.id}</p>
             </div>
@@ -519,16 +539,9 @@ export default async function InvoicePage({
           {/* Right Side: Financial Breakdown */}
           <div className="w-full sm:w-64 space-y-2 text-xs">
             <div className="flex justify-between text-zinc-600">
-              <span>
-                Subtotal
-                {order.is_gst && (
-                  <span className="text-[9px] font-semibold text-zinc-400 uppercase ml-1">
-                    incl. GST
-                  </span>
-                )}
-              </span>
-              <span className="font-mono text-zinc-900">
-                ₹{subtotalNum.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <span>Items Subtotal / Taxable Value</span>
+              <span className="font-mono text-zinc-900 font-medium">
+                ₹{taxableValue.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
 
@@ -537,7 +550,7 @@ export default async function InvoicePage({
                 <span>
                   Discount {order.discount_type === "PERCENT" ? `(${order.discount_value}%)` : ""}
                 </span>
-                <span className="font-mono text-zinc-900">
+                <span className="font-mono text-rose-600 font-medium">
                   − ₹{discountNum.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
@@ -545,18 +558,15 @@ export default async function InvoicePage({
 
             {order.is_gst && gstAmountNum > 0 && (
               <>
-                <div className="pt-1 mt-1 border-t border-dashed border-zinc-200 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
-                  GST (included above)
-                </div>
                 <div className="flex justify-between text-zinc-600">
                   <span>CGST ({halfGstRate.toFixed(1)}%)</span>
-                  <span className="font-mono text-zinc-800">
+                  <span className="font-mono text-zinc-800 font-medium">
                     ₹{halfGstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="flex justify-between text-zinc-600">
                   <span>SGST ({halfGstRate.toFixed(1)}%)</span>
-                  <span className="font-mono text-zinc-800">
+                  <span className="font-mono text-zinc-800 font-medium">
                     ₹{halfGstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
@@ -564,19 +574,19 @@ export default async function InvoicePage({
             )}
 
             {deliveryFeeNum > 0 && (
-              <div className="flex justify-between text-zinc-600 pt-1 border-t border-dashed border-zinc-200">
-                <span>Delivery Fee</span>
-                <span className="font-mono text-zinc-800">
+              <div className="flex justify-between text-zinc-600">
+                <span>Delivery / Freight</span>
+                <span className="font-mono text-zinc-800 font-medium">
                   ₹{deliveryFeeNum.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
             )}
 
-            <div className="border-t border-zinc-900 pt-2.5 mt-2 flex justify-between items-baseline">
-              <span className="text-sm font-bold text-zinc-900 uppercase">
-                Total
+            <div className="border-t-2 border-b-4 border-double border-zinc-900 py-2 mt-2 flex justify-between items-baseline">
+              <span className="font-black text-sm tracking-wider uppercase text-black">
+                GRAND TOTAL
               </span>
-              <span className="font-mono text-lg font-bold text-zinc-900">
+              <span className="font-mono font-black text-base text-black">
                 ₹{grandTotalNum.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>

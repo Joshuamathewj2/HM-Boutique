@@ -32,7 +32,7 @@ export default async function AdvanceReceiptPage({
           The requested advance order #{id} could not be found.
         </p>
         <Link
-          href="/pos/admin/secure/control-panel/ss-creatives"
+          href="/pos/admin/secure/control-panel/hm-boutique"
           className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-900 hover:bg-zinc-800 rounded-md text-white font-medium text-xs transition-colors"
         >
           <ArrowLeft className="w-3.5 h-3.5" /> Back to Dashboard
@@ -252,7 +252,7 @@ export default async function AdvanceReceiptPage({
               <span>Deposit Paid ({depositLabel})</span>
               <span className="font-mono text-zinc-900">− ₹{fmt(depositNum)}</span>
             </div>
-            <div className="border-t border-zinc-900 pt-2.5 mt-2 flex justify-between items-baseline">
+            <div className="border-t-2 border-b-4 border-double border-zinc-900 py-2 mt-2 flex justify-between items-baseline">
               <span className="text-sm font-bold text-zinc-900 uppercase">
                 Balance Due
               </span>

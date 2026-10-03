@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/",
-        destination: "/pos/admin/secure/control-panel/ss-creatives",
+        destination: "/pos/admin/secure/control-panel/hm-boutique",
         permanent: false,
       },
     ];

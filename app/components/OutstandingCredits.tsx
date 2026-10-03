@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Wallet,
   CheckCircle2,
@@ -20,6 +21,15 @@ import {
 } from "lucide-react";
 import { OrderWithRelations } from "@/lib/types";
 import { markCreditOrderPaid, updateCreditDueDate } from "@/app/pos/actions";
+
+import { ORDER_STATUS, STATUS } from "@/lib/orderStatus";
+import { normalizeOrder, waLink } from "@/lib/normalizeOrder";
+import { formatINR } from "@/lib/money";
+import { BRAND_EN } from "@/lib/brand";
+import { supabase } from "@/lib/supabaseClient";
+import { isUuid } from "@/lib/ids";
+import { toast } from "@/lib/toast";
+import { completeOrder } from "@/lib/completeOrder";
 
 export interface OutstandingCreditsProps {
   orders: OrderWithRelations[];
@@ -88,6 +98,7 @@ export default function OutstandingCredits({
   onDeleteOrder,
   onOrdersUpdated,
 }: OutstandingCreditsProps) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<"outstanding" | "history">("outstanding");
   const [search, setSearch] = useState("");
   const [datePreset, setDatePreset] = useState<DatePreset>("all");
@@ -96,16 +107,18 @@ export default function OutstandingCredits({
   const [settlingId, setSettlingId] = useState<string | null>(null);
   const [savingDueDateId, setSavingDueDateId] = useState<string | null>(null);
   const [localOverrides, setLocalOverrides] = useState<
-    Record<string, { credit_status?: "outstanding" | "paid"; credit_due_date?: string; credit_paid_at?: string }>
+    Record<string, { status?: string; credit_status?: "outstanding" | "paid"; credit_due_date?: string; credit_paid_at?: string }>
   >({});
 
-  // Combine live orders with optimistic local overrides
+  // Combine live orders with optimistic local overrides and full normalization
   const effectiveOrders = useMemo(() => {
-    return orders.map((o) => {
+    return (orders || []).map((raw) => {
+      const o = normalizeOrder(raw) as any;
       const override = localOverrides[o.id];
       if (!override) return o;
       return {
         ...o,
+        status: override.status !== undefined ? override.status : o.status,
         credit_status: override.credit_status !== undefined ? override.credit_status : o.credit_status,
         credit_due_date: override.credit_due_date !== undefined ? override.credit_due_date : o.credit_due_date,
         credit_paid_at: override.credit_paid_at !== undefined ? override.credit_paid_at : o.credit_paid_at,
@@ -113,23 +126,31 @@ export default function OutstandingCredits({
     });
   }, [orders, localOverrides]);
 
-  // Outstanding vs Paid Orders
+  // Outstanding vs Paid Orders (Derived strictly from rows)
   const allOutstanding = useMemo(() => {
     return effectiveOrders
       .filter((o) => {
-        const isCredit = Boolean(o.is_credit || o.payment_mode === "CREDIT" || o.credit_status);
+        const isCredit = Boolean(
+          o.is_credit ||
+          String(o.payment_mode || o.payment_method || '').toUpperCase() === "CREDIT" ||
+          o.credit_status
+        );
         if (!isCredit) return false;
-        return o.credit_status !== "paid";
+        return String(o.status || '').toUpperCase() !== ORDER_STATUS.COMPLETED && o.credit_status !== "paid";
       })
-      .sort((a, b) => (a.credit_due_date || "9999-99-99").localeCompare(b.credit_due_date || "9999-99-99"));
+      .sort((a, b) => (a.credit_due_date || a.due_date || "9999-99-99").localeCompare(b.credit_due_date || b.due_date || "9999-99-99"));
   }, [effectiveOrders]);
 
   const allHistory = useMemo(() => {
     return effectiveOrders
       .filter((o) => {
-        const isCredit = Boolean(o.is_credit || o.payment_mode === "CREDIT" || o.credit_status);
+        const isCredit = Boolean(
+          o.is_credit ||
+          String(o.payment_mode || o.payment_method || '').toUpperCase() === "CREDIT" ||
+          o.credit_status
+        );
         if (!isCredit) return false;
-        return o.credit_status === "paid";
+        return String(o.status || '').toUpperCase() === ORDER_STATUS.COMPLETED || o.credit_status === "paid";
       })
       .sort((a, b) => (b.credit_paid_at || b.created_at || "").localeCompare(a.credit_paid_at || a.created_at || ""));
   }, [effectiveOrders]);
@@ -199,62 +220,99 @@ export default function OutstandingCredits({
   }, [overdueList]);
 
   // Mark as Paid
-  const handleMarkAsPaid = async (order: OrderWithRelations) => {
-    const confirmMsg = `Mark ${formatCurrency(order.grand_total)} from "${order.customer_name}" (#${order.id}) as fully paid & settled?`;
+  const handleMarkAsPaid = async (order: any) => {
+    const norm = normalizeOrder(order);
+    if (!norm) return;
+    const invoiceDisplay = norm.invoiceNo || norm.invoice_no || norm.id || order.id;
+    const orderTotal = norm.total;
+    const confirmMsg = `Mark ${formatCurrency(orderTotal)} from "${norm.customer_name}" (#${invoiceDisplay}) as fully paid & settled?`;
     if (!window.confirm(confirmMsg)) return;
 
-    setSettlingId(order.id);
+    const rowKey = order.id || norm.id;
+    setSettlingId(rowKey);
     const nowIso = new Date().toISOString();
 
-    // Optimistic UI update
-    setLocalOverrides((prev) => ({
-      ...prev,
-      [order.id]: {
-        ...prev[order.id],
-        credit_status: "paid",
-        credit_paid_at: nowIso,
-      },
-    }));
-
     try {
-      await markCreditOrderPaid(order.id);
-      if (onOrdersUpdated) onOrdersUpdated();
-    } catch (err) {
+      const updated = await completeOrder(supabase, norm);
+      const settledId = updated?.id || norm.id || rowKey;
+
+      setLocalOverrides((prev) => ({
+        ...prev,
+        [rowKey]: {
+          status: STATUS.COMPLETED,
+          credit_status: "paid",
+          credit_paid_at: nowIso,
+        },
+        [settledId]: {
+          status: STATUS.COMPLETED,
+          credit_status: "paid",
+          credit_paid_at: nowIso,
+        },
+      }));
+
+      router.refresh();
+      if (onOrdersUpdated) await onOrdersUpdated();
+      toast.success('Marked as paid');
+    } catch (err: any) {
       console.error("Failed to mark credit as paid:", err);
-      alert("Failed to mark order as paid. Reverting changes.");
-      setLocalOverrides((prev) => {
-        const next = { ...prev };
-        delete next[order.id];
-        return next;
-      });
+      toast.error(`Failed to mark order as paid: ${err?.message || err}`);
     } finally {
       setSettlingId(null);
     }
   };
 
   // Due Date Change
-  const handleDueDateChange = async (order: OrderWithRelations, newDate: string) => {
-    if (!newDate || newDate === order.credit_due_date) return;
-    setSavingDueDateId(order.id);
+  const handleDueDateChange = async (order: any, newDate: string) => {
+    const norm = normalizeOrder(order);
+    if (!norm) return;
+    const rowKey = order.id || norm.id;
+    if (!newDate || newDate === norm.credit_due_date) return;
+    setSavingDueDateId(rowKey);
 
-    // Optimistic UI update
+    let targetId = norm.id;
+    if (!isUuid(targetId)) {
+      try {
+        const { data: found } = await supabase
+          .from("orders")
+          .select("id")
+          .eq("invoice_no", norm.invoiceNo || norm.invoice_no || targetId)
+          .maybeSingle();
+        if (found?.id) targetId = found.id;
+      } catch {}
+    }
+
     setLocalOverrides((prev) => ({
       ...prev,
-      [order.id]: {
-        ...prev[order.id],
+      [rowKey]: {
+        ...prev[rowKey],
         credit_due_date: newDate,
       },
     }));
 
     try {
-      await updateCreditDueDate(order.id, newDate);
-      if (onOrdersUpdated) onOrdersUpdated();
-    } catch (err) {
+      const { error } = await supabase
+        .from("orders")
+        .update({
+          due_date: newDate,
+          credit_due_date: newDate,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", targetId)
+        .select()
+        .maybeSingle();
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      if (onOrdersUpdated) await onOrdersUpdated();
+      toast.success('Due date updated');
+    } catch (err: any) {
       console.error("Failed to update due date:", err);
-      alert("Failed to update due date. Reverting.");
+      toast.error(`Failed to update due date: ${err?.message || err}`);
       setLocalOverrides((prev) => {
         const next = { ...prev };
-        delete next[order.id];
+        delete next[rowKey];
         return next;
       });
     } finally {
@@ -263,36 +321,20 @@ export default function OutstandingCredits({
   };
 
   // WhatsApp Reminder / Settlement share
-  const handleWhatsAppShare = (order: OrderWithRelations) => {
-    const phone = (order.customer_phone || "").replace(/\D/g, "");
-    if (!phone) {
-      alert("No phone number found for this customer.");
+  const handleWhatsAppShare = (order: any) => {
+    const norm = normalizeOrder(order);
+    const phone = norm.customerPhone || norm.phone || "";
+    const orderId = norm.invoiceNo || norm.invoice_no || norm.id;
+    const balance = norm.balance;
+    const balanceFormatted = formatINR(balance);
+
+    const message = `Hello ${norm.customerName},\nThis is a friendly reminder from ${BRAND_EN} regarding your pending credit invoice #${orderId} for ₹${balanceFormatted}.\nThank you!`;
+    const link = waLink(phone, message);
+    if (!link) {
+      toast.error("No valid phone number for this customer");
       return;
     }
-    const cleanPhone = phone.length === 10 ? `91${phone}` : phone;
-    const origin = typeof window !== "undefined" ? window.location.origin : "";
-    const invoiceUrl = `${origin}/invoice/${order.id}`;
-
-    let message = "";
-    if (order.credit_status === "paid") {
-      const paidDate = formatDate(order.credit_paid_at || new Date().toISOString());
-      message = `✅ *Payment Received — HM Boutique* ✅\n\nDear ${order.customer_name || "Valued Customer"},\n\nWe have received your payment of ${formatCurrency(order.grand_total)} and your credit bill has been fully cleared.\n\n🧾 *Invoice No:* #${order.id}\n💰 *Amount Paid:* ${formatCurrency(order.grand_total)}\n📅 *Paid On:* ${paidDate}\n✔️ *Balance Due:* ₹ 0.00\n\n📄 *View Invoice:* ${invoiceUrl}\n\nThank you for shopping with HM Boutique! ✨`;
-    } else {
-      const days = toDaysOverdue(order.credit_due_date);
-      const dueText = formatDate(order.credit_due_date);
-      const statusNote =
-        days > 0
-          ? `⚠️ This payment is *${days} day${days > 1 ? "s" : ""} overdue*.`
-          : days === 0
-          ? "⏰ This payment is *due today*."
-          : `📅 This payment is due on *${dueText}*.`;
-
-      message = `🔔 *Payment Reminder — HM Boutique* 🔔\n\nDear ${order.customer_name || "Valued Customer"},\n\nThis is a friendly reminder regarding your pending credit purchase with HM Boutique.\n\n🧾 *Invoice No:* #${order.id}\n💰 *Amount Due:* ${formatCurrency(order.grand_total)}\n📅 *Due Date:* ${dueText}\n${statusNote}\n\n📄 *View Digital Invoice:* ${invoiceUrl}\n\nKindly clear the payment at your earliest convenience. Thank you! 🙏`;
-    }
-
-    const encoded = encodeURIComponent(message);
-    const whatsappUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encoded}`;
-    window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+    window.open(link, "_blank", "noopener,noreferrer");
   };
 
   // KPI Card Config
@@ -626,11 +668,11 @@ export default function OutstandingCredits({
                         <button
                           type="button"
                           onClick={() => void handleMarkAsPaid(order)}
-                          disabled={settlingId === order.id}
+                          disabled={Boolean(settlingId && (settlingId === order.id || settlingId === order.invoiceNo || settlingId === order.invoice_no))}
                           className="bg-[#F500A0] hover:bg-[#d4008a] text-white font-bold px-3 py-1.5 rounded-lg transition-colors text-xs shadow-sm inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shrink-0"
                         >
                           <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>{settlingId === order.id ? "Saving..." : "Mark as Paid"}</span>
+                          <span>{settlingId && (settlingId === order.id || settlingId === order.invoiceNo || settlingId === order.invoice_no) ? "Saving..." : "Mark as Paid"}</span>
                         </button>
                       </div>
                     </div>
@@ -744,11 +786,11 @@ export default function OutstandingCredits({
                               <button
                                 type="button"
                                 onClick={() => void handleMarkAsPaid(order)}
-                                disabled={settlingId === order.id}
+                                disabled={Boolean(settlingId && (settlingId === order.id || settlingId === order.invoiceNo || settlingId === order.invoice_no))}
                                 className="ml-1 bg-[#F500A0] hover:bg-[#d4008a] text-white font-bold px-3 py-1.5 rounded-lg transition-colors text-xs shadow-sm inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                               >
                                 <CheckCircle2 className="w-3.5 h-3.5" />
-                                <span>{settlingId === order.id ? "Saving..." : "Mark as Paid"}</span>
+                                <span>{settlingId && (settlingId === order.id || settlingId === order.invoiceNo || settlingId === order.invoice_no) ? "Saving..." : "Mark as Paid"}</span>
                               </button>
                             </div>
                           </td>

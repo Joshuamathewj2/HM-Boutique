@@ -130,7 +130,7 @@ export async function submitOrder(payload: {
   remarks?: string | null;
   referenceNumber?: string | null;
   creditDueDate?: string | null;
-}): Promise<{ orderId: string }> {
+}): Promise<{ orderId: string; id?: string; invoiceNo?: string }> {
   return await dbStore.submitOrder(payload);
 }
 
@@ -152,6 +152,7 @@ export async function fetchExpenses(): Promise<Expense[]> {
 }
 
 export async function createExpense(data: {
+  id?: string;
   title: string;
   category: string;
   amount: number;

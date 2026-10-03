@@ -70,6 +70,7 @@ import {
   removeProduct,
   fetchExpenses,
   createExpense,
+  editExpense,
   removeExpense,
   fetchCategories,
   createCategory,
@@ -82,11 +83,11 @@ import {
   finalizeAdvanceOrder,
   setAdvanceOrderStatus,
 } from "@/app/pos/actions";
+import { toast } from "@/lib/toast";
 import { Product, Expense, Category, AdvanceOrderWithRelations, AdvanceOrderStatus } from "@/lib/types";
 import Attendance from "@/app/components/Attendance";
 import WorkAllocation from "@/app/components/WorkAllocation";
 import Coupons from "@/app/components/Coupons";
-import StoreSettings from "@/app/components/StoreSettings";
 import OutstandingCredits from "@/app/components/OutstandingCredits";
 import LowStockAlarmModal from "@/app/components/LowStockAlarmModal";
 import OverdueTaskAlarmModal from "@/app/components/OverdueTaskAlarmModal";
@@ -94,6 +95,9 @@ import StockAdjustmentModal from "@/app/components/StockAdjustmentModal";
 import InvoiceModal from "@/app/components/InvoiceModal";
 import { checkCoupon, adjustProductStock, seedCatalog } from "@/app/pos/actions";
 import { BRAND_EN, BRAND_ADDRESS, BRAND_PHONE_DISPLAY, BRAND_LOGO, DEFAULT_SHOP_PROFILE } from "@/lib/brand";
+import { calculateTaxAndTotals, formatINR } from "@/lib/money";
+import { ORDER_STATUS } from "@/lib/orderStatus";
+import { normalizeOrder } from "@/lib/normalizeOrder";
 
 // Preset expense categories (users can also type a custom one)
 const EXPENSE_CATEGORIES = [
@@ -206,11 +210,28 @@ type CompletedOrder = {
   paymentMode: OrderPaymentMode;
   date: string;
   createdAt: string;
-  status: "Completed" | "Pending";
+  status: "Completed" | "Pending" | "COMPLETED" | "PENDING";
   is_credit?: boolean;
   credit_status?: "outstanding" | "paid" | null;
   credit_due_date?: string | null;
   credit_paid_at?: string | null;
+  amount_paid?: number;
+  balance_due?: number;
+  is_advance?: boolean;
+  order_type?: string;
+  invoice_no?: string;
+  invoiceNo?: string;
+  customer_name?: string;
+  customer_phone?: string;
+  phone?: string;
+  customer_address?: string | null;
+  total?: number;
+  grand_total?: number;
+  payment_mode?: string;
+  payment_method?: string;
+  due_date?: string | null;
+  bill_date?: string;
+  created_at?: string;
 };
 
 const SearchableItemInput = ({
@@ -460,6 +481,7 @@ export default function POSBilling() {
   const [splitGpay, setSplitGpay] = useState<number>(0);
   const [applyGST, setApplyGST] = useState<boolean>(false);
   const [gstPercentage, setGstPercentage] = useState<number>(18);
+  const [taxMode, setTaxMode] = useState<"exclusive" | "inclusive">("exclusive");
   const [activeInvoiceId, setActiveInvoiceId] = useState<string | null>(null);
   const [activeInvoiceData, setActiveInvoiceData] = useState<CompletedOrder | any | null>(null);
   const [completedBillData, setCompletedBillData] =
@@ -498,6 +520,13 @@ export default function POSBilling() {
 
   // Expense tracker state
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [expenseClientId, setExpenseClientId] = useState<string>(() =>
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `exp-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  );
+  const isSavingExpenseRef = useRef(false);
+
   const [expTitle, setExpTitle] = useState("");
   const [expCategory, setExpCategory] = useState<string>(EXPENSE_CATEGORIES[0]);
   const [expCustomCategory, setExpCustomCategory] = useState("");
@@ -508,6 +537,61 @@ export default function POSBilling() {
     new Date().toISOString().split("T")[0],
   );
   const [isSavingExpense, setIsSavingExpense] = useState(false);
+
+  // Edit Expense modal state
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editCategory, setEditCategory] = useState<string>("General");
+  const [editCustomCategory, setEditCustomCategory] = useState("");
+  const [editAmount, setEditAmount] = useState<number | "">("");
+  const [editPaymentMode, setEditPaymentMode] = useState<string>("CASH");
+  const [editNotes, setEditNotes] = useState("");
+  const [editDate, setEditDate] = useState<string>("");
+  const [isSavingEditExpense, setIsSavingEditExpense] = useState(false);
+  const isSavingEditExpenseRef = useRef(false);
+
+  // PWA Install prompt state
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isPwaInstalled, setIsPwaInstalled] = useState(false);
+
+  useEffect(() => {
+    if (
+      typeof window !== "undefined" &&
+      (window.matchMedia("(display-mode: standalone)").matches ||
+        (window.navigator as any).standalone === true)
+    ) {
+      setIsPwaInstalled(true);
+      return;
+    }
+
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    const handleAppInstalled = () => {
+      setIsPwaInstalled(true);
+      setDeferredPrompt(null);
+    };
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("appinstalled", handleAppInstalled);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", handleAppInstalled);
+    };
+  }, []);
+
+  const handleInstallPwa = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === "accepted") {
+      setIsPwaInstalled(true);
+    }
+    setDeferredPrompt(null);
+  };
   const [expensePeriod, setExpensePeriod] = useState<
     "all" | "today" | "week" | "month" | "year" | "custom"
   >("month");
@@ -656,11 +740,17 @@ export default function POSBilling() {
 
       setOrders(
         ordersData.map((o) => {
+          const norm = normalizeOrder(o) as any;
           return {
+            ...norm,
             id: o.id,
-            customerName: o.customer_name || "Guest",
-            customerPhone: o.customer_phone,
-            customerAddress: o.customer_address || null,
+            customerName: norm.customerName,
+            customer_name: norm.customerName,
+            customerPhone: norm.customerPhone,
+            customer_phone: norm.customerPhone,
+            phone: norm.customerPhone,
+            customerAddress: norm.customerAddress,
+            customer_address: norm.customerAddress,
             source: o.source,
             isGst: Boolean(o.is_gst),
             items: o.items.map((i) => ({
@@ -680,6 +770,10 @@ export default function POSBilling() {
             gstAmount: Number(o.gst_amount) || 0,
             deliveryFee: Number(o.delivery_fee) || 0,
             grandTotal: Number(o.grand_total) || 0,
+            grand_total: Number(o.grand_total) || 0,
+            total: Number(o.grand_total) || 0,
+            amount_paid: Number(o.amount_paid ?? o.cash_received ?? 0),
+            balance_due: Number(o.balance_due ?? norm.balance),
             cashReceived: Number(o.cash_received) || 0,
             splitCash: Number((o as { split_cash?: number }).split_cash) || 0,
             splitGpay: Number((o as { split_gpay?: number }).split_gpay) || 0,
@@ -688,9 +782,19 @@ export default function POSBilling() {
             )
               ? (o.payment_mode as OrderPaymentMode)
               : "CASH",
+            payment_mode: o.payment_mode || "CASH",
+            payment_method: o.payment_method || (o.payment_mode === "CREDIT" ? "CREDIT" : "CASH"),
+            is_credit: Boolean(o.is_credit || o.payment_mode === "CREDIT" || o.payment_method === "CREDIT"),
+            credit_status: o.credit_status || null,
+            credit_due_date: o.credit_due_date || o.due_date || null,
+            due_date: o.credit_due_date || o.due_date || null,
             date: o.bill_date,
+            bill_date: o.bill_date,
             createdAt: o.created_at,
-            status: o.status === "COMPLETED" ? "Completed" : "Pending",
+            created_at: o.created_at,
+            status: String(o.status || "").toUpperCase() === "COMPLETED" ? "Completed" : "Pending",
+            is_advance: Boolean((o as any).is_advance),
+            order_type: (o as any).order_type,
           };
         }),
       );
@@ -1068,21 +1172,27 @@ export default function POSBilling() {
     setCatalog((prev) => prev.filter((c) => c.id !== id));
   };
 
-  // Product prices are GST-inclusive. Subtotal already contains GST; we back-derive
-  // the GST portion for display and never add it on top of the grand total.
-  const subtotal = items.reduce((acc, item) => acc + item.price * item.qty, 0);
+  const subtotal = Math.round(items.reduce((acc, item) => acc + (Number(item.price) || 0) * (Number(item.qty) || 1), 0) * 100) / 100;
   const manualDiscount =
     discountType === "percent"
-      ? subtotal * (discountValue / 100)
-      : discountValue;
-  const couponDiscount = appliedCoupon ? appliedCoupon.discountAmount : 0;
-  const calculatedDiscount = manualDiscount + couponDiscount;
-  const netInclusive = Math.max(0, subtotal - calculatedDiscount);
-  const gstAmount =
-    applyGST && gstPercentage > 0
-      ? netInclusive - netInclusive / (1 + gstPercentage / 100)
-      : 0;
-  const grandTotal = netInclusive + deliveryFee;
+      ? (subtotal * (Number(discountValue) || 0)) / 100
+      : Number(discountValue) || 0;
+  const couponDiscount = appliedCoupon ? Number(appliedCoupon.discountAmount) || 0 : 0;
+  const calculatedDiscount = Math.round((manualDiscount + couponDiscount) * 100) / 100;
+  const netDiscounted = Math.max(0, subtotal - calculatedDiscount);
+
+  const taxCalculation = calculateTaxAndTotals(
+    netDiscounted,
+    applyGST ? Number(gstPercentage) || 0 : 0,
+    Number(deliveryFee) || 0,
+    taxMode
+  );
+
+  const taxableAmount = taxCalculation.taxable;
+  const gstAmount = taxCalculation.gst;
+  const cgstAmount = taxCalculation.cgst;
+  const sgstAmount = taxCalculation.sgst;
+  const grandTotal = taxCalculation.grand;
 
   const handleApplyCoupon = async () => {
     if (!couponCodeInput.trim()) return;
@@ -1437,21 +1547,23 @@ export default function POSBilling() {
     const itemsToSave = items;
 
     // Recalculate values locally to avoid React state lag issues
-    const localSubtotal = itemsToSave.reduce(
-      (acc, item) => acc + item.price * item.qty,
-      0,
-    );
-    const localCalculatedDiscount =
+    const localSubtotal = Math.round(itemsToSave.reduce((acc, item) => acc + (Number(item.price) || 0) * (Number(item.qty) || 1), 0) * 100) / 100;
+    const localCalculatedDiscount = Math.round((
       discountType === "percent"
-        ? localSubtotal * (discountValue / 100)
-        : discountValue;
-    // Prices are GST-inclusive: derive GST from subtotal instead of adding on top.
-    const localNetInclusive = Math.max(0, localSubtotal - localCalculatedDiscount);
-    const localGstAmount =
-      applyGST && gstPercentage > 0
-        ? localNetInclusive - localNetInclusive / (1 + gstPercentage / 100)
-        : 0;
-    const localGrandTotal = localNetInclusive + deliveryFee;
+        ? (localSubtotal * (Number(discountValue) || 0)) / 100
+        : Number(discountValue) || 0
+    ) * 100) / 100;
+    const localNetDiscounted = Math.max(0, Math.round((localSubtotal - localCalculatedDiscount) * 100) / 100);
+
+    const localTaxResult = calculateTaxAndTotals(
+      localNetDiscounted,
+      applyGST ? Number(gstPercentage) || 0 : 0,
+      Number(deliveryFee) || 0,
+      taxMode
+    );
+    const localTaxableAmount = localTaxResult.taxable;
+    const localGstAmount = localTaxResult.gst;
+    const localGrandTotal = localTaxResult.grand;
 
     // Validate totals against PostgreSQL numeric(10,2) overflow limit (99,999,999.99)
     const MAX_LIMIT = 99999999.99;
@@ -1514,7 +1626,7 @@ export default function POSBilling() {
     setIsSubmittingOrder(true);
 
     try {
-      const { orderId: newOrderId } = await submitOrder({
+      const { orderId: newOrderId, id: dbUuid } = await submitOrder({
         orderId: `INV-${new Date().getFullYear()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`,
         customerName: customerName || "Guest",
         customerPhone: customerPhone,
@@ -1545,39 +1657,62 @@ export default function POSBilling() {
       });
 
       // Construct mappedOrder directly in memory to respond with ZERO blocking delay
-      const mappedOrder: CompletedOrder = {
-        id: newOrderId,
+      const mappedOrder: any = normalizeOrder({
+        id: dbUuid || newOrderId,
+        invoice_no: newOrderId,
+        invoiceNo: newOrderId,
         customerName: customerName.trim() || "Guest",
+        customer_name: customerName.trim() || "Guest",
         customerPhone: customerPhone,
+        customer_phone: customerPhone,
+        phone: customerPhone,
         customerAddress: customerAddress.trim() || null,
+        customer_address: customerAddress.trim() || null,
         source: isOnline ? "ONLINE" : "OFFLINE",
         isGst: Boolean(applyGST),
         items: itemsToSave.map((i, idx) => ({
           id: `oi-${newOrderId}-${idx}`,
           name: i.name,
+          snapshot_name: i.name,
           desc: i.name === "Custom Item" ? "Custom" : (i.desc || ""),
           price: Number(i.price) || 0,
+          snapshot_price: Number(i.price) || 0,
           qty: Number(i.qty) || 0,
+          quantity: Number(i.qty) || 0,
         })),
         subtotal: Number(localSubtotal) || 0,
         discount: Number(localCalculatedDiscount) || 0,
+        discount_amount: Number(localCalculatedDiscount) || 0,
         discountType: discountType === "percent" ? "PERCENT" : "FIXED",
         discountValue: discountValue ? Number(discountValue) : undefined,
         gstPercentage: applyGST ? Number(gstPercentage) : 0,
+        gst_percentage: applyGST ? Number(gstPercentage) : 0,
         gstAmount: Number(localGstAmount) || 0,
+        gst_amount: Number(localGstAmount) || 0,
         deliveryFee: Number(deliveryFee) || 0,
+        delivery_fee: Number(deliveryFee) || 0,
         grandTotal: Number(localGrandTotal) || 0,
+        grand_total: Number(localGrandTotal) || 0,
+        total: Number(localGrandTotal) || 0,
         cashReceived: Number(receivedAmount) || 0,
+        cash_received: Number(receivedAmount) || 0,
+        amount_paid: paymentMode === "CREDIT" ? 0 : Number(localGrandTotal) || 0,
+        balance_due: paymentMode === "CREDIT" ? Number(localGrandTotal) || 0 : 0,
         splitCash: splitCashVal,
         splitGpay: splitGpayVal,
         paymentMode: paymentMode,
+        payment_mode: paymentMode,
+        payment_method: paymentMode === "CREDIT" ? "CREDIT" : paymentMode,
         is_credit: paymentMode === "CREDIT",
         credit_status: paymentMode === "CREDIT" ? "outstanding" : null,
         credit_due_date: paymentMode === "CREDIT" ? (creditDueDate || null) : null,
+        due_date: paymentMode === "CREDIT" ? (creditDueDate || null) : null,
         date: orderTimestamp,
+        bill_date: orderTimestamp,
         createdAt: new Date().toISOString(),
-        status: "Completed",
-      };
+        created_at: new Date().toISOString(),
+        status: (paymentMode === "CREDIT" ? ORDER_STATUS.PENDING : ORDER_STATUS.COMPLETED) as any,
+      });
 
       // Instantly update orders history and open the completed receipt banner
       setOrders((prev) => [mappedOrder, ...prev]);
@@ -1738,7 +1873,13 @@ export default function POSBilling() {
       )
     )
       return;
-    await removeOrder(orderId);
+    try {
+      await removeOrder(orderId);
+    } catch (err: any) {
+      console.error("Failed to delete order:", err);
+      alert(`Failed to delete invoice: ${err?.message || "database rejected the delete"}`);
+      return;
+    }
     setOrders((prev) => prev.filter((o) => o.id !== orderId));
     if (selectedOrder?.id === orderId) setSelectedOrder(null);
     if (completedBillData?.id === orderId) setCompletedBillData(null);
@@ -1746,47 +1887,160 @@ export default function POSBilling() {
   };
 
   // ── Expense tracker: handlers ──────────────────────────────────────
-  const handleAddExpense = async () => {
+  const handleAddExpense = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (isSavingExpenseRef.current || isSavingExpense) return;
+
     const amountNum =
       typeof expAmount === "number" ? expAmount : parseFloat(String(expAmount));
     const category =
       (expCategory === "__custom__" ? expCustomCategory : expCategory).trim() ||
       "General";
+
     if (!expTitle.trim()) {
-      alert("Please enter what the expense was for.");
+      toast.error("Please enter what the expense was for.");
       return;
     }
-    if (!amountNum || amountNum <= 0) {
-      alert("Please enter a valid amount greater than 0.");
+    if (!amountNum || amountNum <= 0 || isNaN(amountNum)) {
+      toast.error("Please enter a valid amount greater than 0.");
       return;
     }
+    if (!expDate) {
+      toast.error("Please select a date for the expense.");
+      return;
+    }
+
+    isSavingExpenseRef.current = true;
     setIsSavingExpense(true);
     try {
       const created = await createExpense({
+        id: expenseClientId,
         title: expTitle.trim(),
         category,
-        amount: amountNum,
+        amount: Number(amountNum.toFixed(2)),
         payment_mode: expPaymentMode,
         notes: expNotes.trim() || null,
         expense_date: expDate,
       });
-      setExpenses((prev) => [
-        { ...created, amount: Number(created.amount) || 0 },
-        ...prev,
-      ]);
-      // Keep category / payment mode / date for fast repeat entry
+
+      const formattedCreated: Expense = {
+        ...created,
+        amount: Number(created.amount) || 0,
+      };
+
+      setExpenses((prev) => {
+        const exists = prev.some((r) => r.id === formattedCreated.id);
+        if (exists) {
+          return prev.map((r) =>
+            r.id === formattedCreated.id ? formattedCreated : r,
+          );
+        }
+        return [formattedCreated, ...prev];
+      });
+
+      toast.success("Expense added successfully");
+
+      // Reset form and generate fresh idempotency client ID
       setExpTitle("");
       setExpAmount("");
       setExpNotes("");
+      setExpenseClientId(
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `exp-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      );
       if (expCategory === "__custom__") {
         setExpCategory(category);
         setExpCustomCategory("");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error adding expense:", err);
-      alert("Could not save the expense. Please try again.");
+      toast.error(err?.message || "Could not save the expense. Please try again.");
     } finally {
+      isSavingExpenseRef.current = false;
       setIsSavingExpense(false);
+    }
+  };
+
+  const openEditExpenseModal = (expense: Expense) => {
+    setEditingExpense(expense);
+    setEditTitle(expense.title || "");
+    const isPreset = (EXPENSE_CATEGORIES as readonly string[]).includes(expense.category);
+    if (isPreset) {
+      setEditCategory(expense.category);
+      setEditCustomCategory("");
+    } else {
+      setEditCategory("__custom__");
+      setEditCustomCategory(expense.category || "");
+    }
+    setEditAmount(expense.amount);
+    setEditPaymentMode(expense.payment_mode || "CASH");
+    setEditNotes(expense.notes || "");
+    setEditDate(expense.expense_date || new Date().toISOString().split("T")[0]);
+  };
+
+  const handleSaveEditExpense = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (isSavingEditExpenseRef.current || isSavingEditExpense) return;
+    if (!editingExpense || !editingExpense.id) {
+      toast.error("Expense record has no valid id");
+      return;
+    }
+
+    const amountNum =
+      typeof editAmount === "number" ? editAmount : parseFloat(String(editAmount));
+    const category =
+      (editCategory === "__custom__" ? editCustomCategory : editCategory).trim() ||
+      "General";
+
+    if (!editTitle.trim()) {
+      toast.error("Please enter expense name / description.");
+      return;
+    }
+    if (!amountNum || amountNum <= 0 || isNaN(amountNum)) {
+      toast.error("Please enter a valid amount greater than 0.");
+      return;
+    }
+    if (!editDate) {
+      toast.error("Please select a date for the expense.");
+      return;
+    }
+
+    isSavingEditExpenseRef.current = true;
+    setIsSavingEditExpense(true);
+    try {
+      const updated = await editExpense(editingExpense.id, {
+        title: editTitle.trim(),
+        category,
+        amount: Number(amountNum.toFixed(2)),
+        payment_mode: editPaymentMode,
+        notes: editNotes.trim() || null,
+        expense_date: editDate,
+      });
+
+      if (!updated) {
+        throw new Error("Update affected 0 rows (check database policies)");
+      }
+
+      const formattedUpdated: Expense = {
+        ...updated,
+        amount: Number(updated.amount) || 0,
+      };
+
+      setExpenses((prev) =>
+        prev.map((r) =>
+          r.id === formattedUpdated.id ? formattedUpdated : r,
+        ),
+      );
+
+      toast.success("Expense updated successfully");
+      setEditingExpense(null);
+    } catch (err: any) {
+      console.error("Error updating expense:", err);
+      toast.error(err?.message || "Could not update the expense.");
+    } finally {
+      isSavingEditExpenseRef.current = false;
+      setIsSavingEditExpense(false);
     }
   };
 
@@ -1795,9 +2049,10 @@ export default function POSBilling() {
     try {
       await removeExpense(id);
       setExpenses((prev) => prev.filter((e) => e.id !== id));
-    } catch (err) {
+      toast.success("Expense deleted");
+    } catch (err: any) {
       console.error("Error deleting expense:", err);
-      alert("Could not delete the expense.");
+      toast.error(err?.message || "Could not delete the expense.");
     }
   };
 
@@ -1936,6 +2191,22 @@ export default function POSBilling() {
       (analyticsGstFilter === "gst" ? o.isGst : !o.isGst);
 
     const analyticsFilteredOrders = orders.filter((o) => {
+      // Realized revenue and sales volume must only recognize finalized sales
+      if (o.is_advance === true && o.status.toUpperCase() !== "COMPLETED") {
+        return false;
+      }
+      const isCredit = Boolean(
+        (o as any).is_credit ||
+        String(o.payment_mode || (o as any).payment_method || o.paymentMode || "").toUpperCase() === "CREDIT" ||
+        (o as any).credit_status
+      );
+      if (isCredit) {
+        const isSettled = String(o.status || "").toUpperCase() === "COMPLETED" || (o as any).credit_status === "paid";
+        if (!isSettled) return false;
+      }
+      if (String(o.status || "").toUpperCase() !== "COMPLETED") {
+        return false;
+      }
       if (!passesGst(o)) return false;
       if (
         analyticsSearchPhone &&
@@ -2418,24 +2689,67 @@ export default function POSBilling() {
         <div className="mt-6 text-[#1C1917]/30 text-[9px] font-bold tracking-widest uppercase">
           HM BOUTIQUE Terminal v1.0
         </div>
+
+        {/* Floating PWA Install Card */}
+        {deferredPrompt && !isPwaInstalled && (
+          <div className="fixed bottom-6 right-6 z-50 bg-black border border-teal-500/30 rounded-2xl p-3 px-4 flex items-center gap-3.5 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-300">
+            <div className="w-10 h-10 rounded-xl border border-teal-500/40 flex items-center justify-center text-teal-400 shrink-0">
+              <Smartphone className="w-5 h-5" />
+            </div>
+            <div className="text-left">
+              <div className="text-[11px] font-black uppercase tracking-wider text-white">
+                INSTALL HM BOUTIQUE
+              </div>
+              <div className="text-[10px] text-gray-400 font-semibold">
+                POS & Billing App
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleInstallPwa}
+              className="bg-[#008f9c] hover:bg-[#007a85] text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer ml-1"
+            >
+              <Download className="w-3.5 h-3.5" />
+              INSTALL
+            </button>
+          </div>
+        )}
       </div>
     );
   }
 
   // Filtered orders for Order History tab
   const historyFilteredOrders = orders.filter((order) => {
-    const matchId = order.id
+    // Strictly isolate advance orders: exclude active/incomplete advance orders
+    if (order.is_advance === true && String(order.status || "").toUpperCase() !== "COMPLETED") {
+      return false;
+    }
+    // Strictly isolate credit orders: pending/unsettled credit orders MUST NEVER appear in Order History
+    const isCreditOrder = Boolean(
+      order.is_credit ||
+      String(order.payment_mode || (order as any).payment_method || order.paymentMode || "").toUpperCase() === "CREDIT" ||
+      order.credit_status
+    );
+    if (isCreditOrder) {
+      const isSettled = String(order.status || "").toUpperCase() === "COMPLETED" || order.credit_status === "paid";
+      if (!isSettled) return false;
+    }
+    // Order History only shows completed transactions
+    if (String(order.status || "").toUpperCase() !== "COMPLETED") {
+      return false;
+    }
+    const matchId = (order.invoiceNo || order.invoice_no || order.id || "")
       .toLowerCase()
       .includes(orderSearchId.toLowerCase());
-    const matchName = order.customerName
+    const matchName = (order.customerName || order.customer_name || "")
       .toLowerCase()
       .includes(orderSearchName.toLowerCase());
-    const matchPhone = (order.customerPhone || "").includes(orderSearchPhone);
+    const matchPhone = (order.customerPhone || order.customer_phone || order.phone || "").includes(orderSearchPhone);
     const matchSource =
       orderFilterSource === "ALL" || order.source === orderFilterSource;
     const matchStatus =
       orderFilterStatus === "ALL" ||
-      order.status.toUpperCase() === orderFilterStatus.toUpperCase();
+      String(order.status || "").toUpperCase() === orderFilterStatus.toUpperCase();
 
     // Period match
     let matchPeriod = true;
@@ -2548,7 +2862,7 @@ export default function POSBilling() {
         : `"N/A"`;
 
       return [
-        o.id,
+        o.invoiceNo || o.invoice_no || o.id,
         formattedDate,
         o.customerName,
         formattedPhone,
@@ -3110,24 +3424,6 @@ export default function POSBilling() {
                     {orders.filter((o: any) => (o.is_credit || o.payment_mode === "CREDIT" || o.credit_status) && o.credit_status !== "paid").length}
                   </span>
                 )}
-              </button>
-            )}
-            {role === "admin" && (
-              <button
-                onClick={() => {
-                  setActiveTab("store_settings");
-                  setCompletedBillData(null);
-                  if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
-                  window.scrollTo({ top: 0, behavior: "instant" });
-                }}
-                className={`w-full flex items-center gap-3.5 px-3.5 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer ${
-                  activeTab === "store_settings"
-                    ? "bg-white text-[#27272A] shadow-md"
-                    : "text-white/90 hover:bg-white/20 hover:text-white"
-                }`}
-              >
-                <Store className="w-5 h-5 shrink-0" />
-                Store Settings
               </button>
             )}
           </nav>
@@ -3951,11 +4247,7 @@ export default function POSBilling() {
                                     {item.qty}x {item.name}
                                   </span>
                                   <span className="font-bold text-[#F500A0]">
-                                    ₹
-                                    {(item.price * item.qty).toLocaleString(
-                                      undefined,
-                                      { minimumFractionDigits: 2 },
-                                    )}
+                                    ₹{formatINR(item.price * item.qty)}
                                   </span>
                                 </div>
                               ))}
@@ -4058,19 +4350,27 @@ export default function POSBilling() {
                             {items
                               .filter((i) => i.name)
                               .reduce((sum, i) => sum + i.qty, 0)}{" "}
-                            items) <span className="text-[9px] font-bold text-[#7C5A52] uppercase">incl. GST</span>
+                            items){" "}
+                            {applyGST && (
+                              <span className="text-[9px] font-bold text-[#7C5A52] uppercase">
+                                ({taxMode === "inclusive" ? "incl. GST" : "excl. GST"})
+                              </span>
+                            )}
                           </span>
-                          <span className="font-bold text-[#000000]">
+                          <span className="font-bold text-[#000000] font-mono">
                             ₹
-                            {subtotal.toLocaleString(undefined, {
+                            {subtotal.toLocaleString("en-IN", {
                               minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
                             })}
                           </span>
                         </div>
                         {appliedCoupon && (
                           <div className="flex justify-between items-center text-xs font-semibold text-[#F500A0]">
                             <span>Coupon Discount ({appliedCoupon.code})</span>
-                            <span className="font-bold">-₹{appliedCoupon.discountAmount.toFixed(2)}</span>
+                            <span className="font-bold font-mono">
+                              -₹{appliedCoupon.discountAmount.toFixed(2)}
+                            </span>
                           </div>
                         )}
 
@@ -4106,12 +4406,39 @@ export default function POSBilling() {
                               GST Invoice
                             </button>
                           </div>
+
                           {applyGST && (
-                            <div className="flex justify-between items-center">
-                              <span className="text-xs font-bold text-[#000000] uppercase tracking-wider">
-                                GST <span className="text-[9px] font-bold text-[#7C5A52]">(incl.)</span>
-                              </span>
-                              <div className="flex items-center gap-2">
+                            <div className="space-y-2 p-2.5 bg-gray-50/80 border border-black/10 rounded-xl">
+                              {/* Tax Mode Selector */}
+                              <div className="flex items-center bg-white border border-black/10 rounded-lg p-0.5 w-full gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setTaxMode("exclusive")}
+                                  className={`flex-1 py-1 rounded-md text-[10px] font-bold tracking-wider uppercase transition-all cursor-pointer ${
+                                    taxMode === "exclusive"
+                                      ? "bg-[#111827] text-white shadow-xs"
+                                      : "text-[#000000] hover:bg-black/5"
+                                  }`}
+                                >
+                                  Exclusive (+GST)
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setTaxMode("inclusive")}
+                                  className={`flex-1 py-1 rounded-md text-[10px] font-bold tracking-wider uppercase transition-all cursor-pointer ${
+                                    taxMode === "inclusive"
+                                      ? "bg-[#111827] text-white shadow-xs"
+                                      : "text-[#000000] hover:bg-black/5"
+                                  }`}
+                                >
+                                  Inclusive (Tax incl.)
+                                </button>
+                              </div>
+
+                              <div className="flex justify-between items-center">
+                                <span className="text-xs font-bold text-[#000000] uppercase tracking-wider">
+                                  GST Rate
+                                </span>
                                 <div className="flex items-center gap-1">
                                   <input
                                     type="number"
@@ -4128,13 +4455,44 @@ export default function POSBilling() {
                                     %
                                   </span>
                                 </div>
-                                <span className="text-xs font-bold text-[#F500A0] w-20 text-right">
-                                  ₹
-                                  {gstAmount.toLocaleString(undefined, {
+                              </div>
+
+                              {taxMode === "inclusive" && (
+                                <div className="flex justify-between items-center text-xs text-gray-600">
+                                  <span>Taxable Base Value</span>
+                                  <span className="font-bold text-black font-mono">
+                                    ₹{taxableAmount.toLocaleString("en-IN", {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    })}
+                                  </span>
+                                </div>
+                              )}
+
+                              <div className="flex justify-between items-center text-xs font-semibold">
+                                <span className="text-[#000000]">
+                                  GST Total ({taxMode === "inclusive" ? "included" : `+${gstPercentage}%`})
+                                </span>
+                                <span className="text-xs font-bold text-[#F500A0] font-mono">
+                                  ₹{gstAmount.toLocaleString("en-IN", {
                                     minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
                                   })}
                                 </span>
                               </div>
+
+                              {gstPercentage > 0 && gstAmount > 0 && (
+                                <div className="flex justify-between items-center text-[10px] font-semibold text-gray-500 pl-1 border-t border-black/5 pt-1">
+                                  <span>CGST ({(gstPercentage / 2).toFixed(1)}%) + SGST ({(gstPercentage / 2).toFixed(1)}%)</span>
+                                  <span className="font-mono">
+                                    ₹{(gstAmount / 2).toLocaleString("en-IN", {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    })}{" "}
+                                    each
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
@@ -4150,7 +4508,15 @@ export default function POSBilling() {
                             <button
                               key={mode}
                               type="button"
-                              onClick={() => setPaymentMode(mode)}
+                              onClick={() => {
+                                if (mode === "CREDIT") {
+                                  setShowAdvanceSaveModal(false);
+                                  setAdvDeposit(0);
+                                  setAdvDeliveryDate("");
+                                  setAdvNotes("");
+                                }
+                                setPaymentMode(mode);
+                              }}
                               className={`py-1.5 rounded-lg text-[10px] font-bold tracking-wider uppercase transition-all cursor-pointer border ${
                                 paymentMode === mode
                                   ? "bg-[#F500A0] text-white border-[#F500A0] shadow-sm"
@@ -4168,10 +4534,11 @@ export default function POSBilling() {
                         <span className="text-[#000000] uppercase tracking-wider">
                           Grand Total
                         </span>
-                        <span className="text-xl text-[#F500A0] font-black">
+                        <span className="text-xl text-[#F500A0] font-black font-mono">
                           ₹
-                          {grandTotal.toLocaleString(undefined, {
+                          {grandTotal.toLocaleString("en-IN", {
                             minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
                           })}
                         </span>
                       </div>
@@ -4235,10 +4602,11 @@ export default function POSBilling() {
                             <span className="font-bold text-[#000000] uppercase tracking-[0.05em]">
                               Total Received
                             </span>
-                            <span className="font-black text-sm text-[#F500A0]">
+                            <span className="font-black text-sm text-[#F500A0] font-mono">
                               ₹
-                              {(splitCash + splitGpay).toLocaleString(undefined, {
+                              {(splitCash + splitGpay).toLocaleString("en-IN", {
                                 minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
                               })}
                             </span>
                           </div>
@@ -4247,10 +4615,11 @@ export default function POSBilling() {
                               <span className="font-bold text-[#000000] uppercase tracking-[0.05em]">
                                 Balance Remaining
                               </span>
-                              <span className="font-black text-sm text-[#DC2626]">
+                              <span className="font-black text-sm text-[#DC2626] font-mono">
                                 ₹
-                                {(grandTotal - (splitCash + splitGpay)).toLocaleString(undefined, {
+                                {(grandTotal - (splitCash + splitGpay)).toLocaleString("en-IN", {
                                   minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
                                 })}
                               </span>
                             </div>
@@ -4259,10 +4628,11 @@ export default function POSBilling() {
                               <span className="font-bold text-[#000000] uppercase tracking-[0.05em]">
                                 Change to Return
                               </span>
-                              <span className="font-black text-sm text-[#00A86B]">
+                              <span className="font-black text-sm text-[#00A86B] font-mono">
                                 ₹
-                                {(splitCash + splitGpay - grandTotal).toLocaleString(undefined, {
+                                {(splitCash + splitGpay - grandTotal).toLocaleString("en-IN", {
                                   minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
                                 })}
                               </span>
                             </div>
@@ -4296,14 +4666,15 @@ export default function POSBilling() {
                             Change Return
                           </span>
                           <span
-                            className={`font-black text-sm ${cashReceived >= grandTotal ? "text-[#00A86B]" : "text-[#27272A]"}`}
+                            className={`font-black text-sm font-mono ${cashReceived >= grandTotal ? "text-[#00A86B]" : "text-[#27272A]"}`}
                           >
                             ₹
                             {Math.max(
                               0,
                               cashReceived - grandTotal,
-                            ).toLocaleString(undefined, {
+                            ).toLocaleString("en-IN", {
                               minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
                             })}
                           </span>
                         </div>
@@ -4332,17 +4703,19 @@ export default function POSBilling() {
                         )}
                       </button>
 
-                      {/* Save as Advance Order — partial payment hold, not counted as revenue */}
-                      <button
-                        onClick={openAdvanceSaveModal}
-                        disabled={isSubmittingOrder}
-                        className={`w-full mt-2 bg-white border-2 border-[#F59E0B] hover:bg-[#FEF3C7] text-[#B45309] py-3 rounded-lg font-black text-[10px] uppercase tracking-[0.1em] flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${
-                          isSubmittingOrder ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
-                        }`}
-                      >
-                        <Clock className="w-4 h-4" />
-                        <span>Save as Advance Order</span>
-                      </button>
+                      {/* Save as Advance Order — conditionally hidden when CREDIT financial option is selected */}
+                      {paymentMode !== "CREDIT" && (
+                        <button
+                          onClick={openAdvanceSaveModal}
+                          disabled={isSubmittingOrder}
+                          className={`w-full mt-2 bg-white border-2 border-[#F59E0B] hover:bg-[#FEF3C7] text-[#B45309] py-3 rounded-lg font-black text-[10px] uppercase tracking-[0.1em] flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${
+                            isSubmittingOrder ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
+                          }`}
+                        >
+                          <Clock className="w-4 h-4" />
+                          <span>Save as Advance Order</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -4368,7 +4741,7 @@ export default function POSBilling() {
                 <div className="bg-[#FEF3C7] border border-[#F59E0B]/40 rounded-lg p-3">
                   <div className="flex justify-between text-[10px] font-bold text-[#78350F] uppercase tracking-wider">
                     <span>Order Total</span>
-                    <span>₹{grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    <span>₹{formatINR(grandTotal)}</span>
                   </div>
                 </div>
 
@@ -4385,7 +4758,7 @@ export default function POSBilling() {
                   />
                   {typeof advDeposit === "number" && advDeposit > 0 && (
                     <p className="mt-1.5 text-[10px] font-bold text-[#7C5A52]">
-                      Balance due: ₹{Math.max(0, grandTotal - Number(advDeposit)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      Balance due: ₹{formatINR(Math.max(0, grandTotal - Number(advDeposit)))}
                     </p>
                   )}
                 </div>
@@ -4837,6 +5210,23 @@ export default function POSBilling() {
                               if (!confirm(`Cancel advance order ${a.id}? The deposit is treated as forfeit/refunded outside the system.`)) return;
                             }
                             try {
+                              // Optimistically update advance orders state so outstanding balance decrements immediately
+                              setAdvanceOrders((prev) =>
+                                prev.map((item) => {
+                                  if (item.id === a.id) {
+                                    if (next === "COMPLETED") {
+                                      return {
+                                        ...item,
+                                        status: "COMPLETED",
+                                        deposit_amount: item.total_amount,
+                                        remaining_balance: 0,
+                                      };
+                                    }
+                                    return { ...item, status: next };
+                                  }
+                                  return item;
+                                })
+                              );
                               await setAdvanceOrderStatus(a.id, next);
                               await fetchData();
                             } catch (err) {
@@ -5119,7 +5509,7 @@ export default function POSBilling() {
                               className="border-b border-transparent hover:bg-[#FFFFFF] transition-colors"
                             >
                               <td className="p-4 text-xs font-semibold text-[#000000]">
-                                {order.id}
+                                {order.invoiceNo || order.invoice_no || order.id}
                               </td>
                               <td className="p-4 text-xs font-bold text-[#000000] whitespace-nowrap">
                                 {new Date(order.date).toLocaleDateString(
@@ -5165,7 +5555,15 @@ export default function POSBilling() {
                               </td>
                               <td className="p-4 text-right">
                                 <div className="flex flex-row items-center justify-end gap-1.5">
-                                  <span className="px-3 py-1 rounded bg-[#10B981]/10 text-[#10B981] text-[10px] font-bold uppercase tracking-wider hidden lg:inline-block mr-1">
+                                  <span
+                                    className={`px-3 py-1 rounded text-[10px] font-bold uppercase tracking-wider hidden lg:inline-block mr-1 ${
+                                      String(order.status || "").toUpperCase() === "COMPLETED"
+                                        ? "bg-[#10B981]/10 text-[#10B981]"
+                                        : String(order.status || "").toUpperCase() === "PENDING"
+                                          ? "bg-[#F59E0B]/10 text-[#D97706]"
+                                          : "bg-[#DC2626]/10 text-[#DC2626]"
+                                    }`}
+                                  >
                                     {order.status}
                                   </span>
                                   <button
@@ -5185,7 +5583,7 @@ export default function POSBilling() {
                                   <button
                                     onClick={() => {
                                       setActiveInvoiceData(order);
-                                      setActiveInvoiceId(order.id);
+                                      setActiveInvoiceId(order.invoiceNo || order.invoice_no || order.id);
                                     }}
                                     title="View invoice"
                                     aria-label="View invoice"
@@ -5535,7 +5933,7 @@ export default function POSBilling() {
                                   className="border-b border-transparent hover:bg-[#FFFFFF]/50 transition-colors"
                                 >
                                   <td className="p-3 text-xs font-semibold text-[#000000]">
-                                    {order.id}
+                                    {order.invoiceNo || order.invoice_no || order.id}
                                   </td>
                                   <td className="p-3 text-xs font-mono font-bold text-[#000000]">
                                     {order.customerPhone || "-"}
@@ -6499,7 +6897,7 @@ export default function POSBilling() {
                                   className="border-b border-transparent hover:bg-[#FFFFFF]/50 transition-colors"
                                 >
                                   <td className="p-3 text-xs font-semibold text-[#000000]">
-                                    {order.id}
+                                    {order.invoiceNo || order.invoice_no || order.id}
                                   </td>
                                   <td className="p-3 text-xs font-mono font-bold text-[#000000]">
                                     {order.customerPhone || "-"}
@@ -6655,7 +7053,7 @@ export default function POSBilling() {
                   <span className="w-1.5 h-6 bg-[#F500A0] rounded-full" />
                   Add Expense
                 </h3>
-                <div className="space-y-3">
+                <form onSubmit={handleAddExpense} className="space-y-3">
                   <div>
                     <label className="block text-[10px] font-bold uppercase tracking-wider text-[#000000] mb-1">
                       What for?
@@ -6761,14 +7159,18 @@ export default function POSBilling() {
                     />
                   </div>
                   <button
-                    onClick={handleAddExpense}
+                    type="submit"
                     disabled={isSavingExpense}
                     className="w-full mt-1 bg-[#F500A0] hover:bg-[#27272A] disabled:opacity-60 text-white py-3 rounded-lg font-black text-[11px] uppercase tracking-[0.1em] flex items-center justify-center gap-2 transition-transform active:scale-[0.98] shadow-sm cursor-pointer"
                   >
-                    <Plus className="w-4 h-4" />
+                    {isSavingExpense ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Plus className="w-4 h-4" />
+                    )}
                     {isSavingExpense ? "Saving…" : "Add Expense"}
                   </button>
-                </div>
+                </form>
               </div>
 
               {/* Category breakdown */}
@@ -6941,13 +7343,26 @@ export default function POSBilling() {
                             })}
                           </td>
                           <td className="p-3 text-center">
-                            <button
-                              onClick={() => handleDeleteExpense(e.id)}
-                              title="Delete expense"
-                              className="inline-flex items-center justify-center w-8 h-8 bg-[#B91C1C]/10 hover:bg-[#B91C1C]/20 text-[#B91C1C] rounded-md transition-colors cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => openEditExpenseModal(e)}
+                                aria-label="Edit expense"
+                                title="Edit expense"
+                                className="inline-flex items-center justify-center w-8 h-8 bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 rounded-md transition-colors cursor-pointer"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteExpense(e.id)}
+                                aria-label="Delete expense"
+                                title="Delete expense"
+                                className="inline-flex items-center justify-center w-8 h-8 bg-[#B91C1C]/10 hover:bg-[#B91C1C]/20 text-[#B91C1C] rounded-md transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -6974,6 +7389,168 @@ export default function POSBilling() {
                 </div>
               )}
             </div>
+
+            {/* Edit Expense Modal */}
+            {editingExpense && (
+              <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+                <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl border border-black/10 animate-in zoom-in-95 duration-200">
+                  <div className="flex justify-between items-center mb-6 pb-4 border-b border-black/10">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-[#F500A0]/10 flex items-center justify-center">
+                        <Pencil className="w-4 h-4 text-[#F500A0]" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-black text-[#000000]">
+                          Edit Expense
+                        </h3>
+                        <p className="text-[11px] text-[#000000]/60 font-semibold">
+                          Update details, category or amount
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEditingExpense(null)}
+                      className="w-8 h-8 rounded-full bg-black/5 hover:bg-black/10 flex items-center justify-center text-black/60 hover:text-black cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleSaveEditExpense} className="space-y-4">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-[#000000] mb-1">
+                        What for? <span className="text-[#F500A0]">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        placeholder="e.g. October shop rent"
+                        required
+                        className="w-full bg-[#FAFAFA] border border-black/10 rounded-lg px-3 py-2.5 text-sm text-[#000000] focus:outline-none focus:border-[#F500A0]"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-[#000000] mb-1">
+                          Amount (₹) <span className="text-[#F500A0]">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={editAmount}
+                          onChange={(e) =>
+                            setEditAmount(
+                              e.target.value === "" ? "" : parseFloat(e.target.value),
+                            )
+                          }
+                          placeholder="0.00"
+                          required
+                          className="w-full bg-[#FAFAFA] border border-black/10 rounded-lg px-3 py-2.5 text-sm text-[#000000] focus:outline-none focus:border-[#F500A0]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-[#000000] mb-1">
+                          Date <span className="text-[#F500A0]">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          value={editDate}
+                          onChange={(e) => setEditDate(e.target.value)}
+                          required
+                          className="w-full bg-[#FAFAFA] border border-black/10 rounded-lg px-3 py-2.5 text-sm text-[#000000] focus:outline-none focus:border-[#F500A0]"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-[#000000] mb-1">
+                        Category
+                      </label>
+                      <select
+                        value={editCategory}
+                        onChange={(e) => setEditCategory(e.target.value)}
+                        className="w-full bg-[#FAFAFA] border border-black/10 rounded-lg px-3 py-2.5 text-sm text-[#000000] focus:outline-none focus:border-[#F500A0] cursor-pointer"
+                      >
+                        {EXPENSE_CATEGORIES.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                        <option value="__custom__">+ Custom category…</option>
+                      </select>
+                    </div>
+
+                    {editCategory === "__custom__" && (
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-[#000000] mb-1">
+                          Custom category name
+                        </label>
+                        <input
+                          type="text"
+                          value={editCustomCategory}
+                          onChange={(e) => setEditCustomCategory(e.target.value)}
+                          placeholder="e.g. Festival decorations"
+                          className="w-full bg-[#FAFAFA] border border-black/10 rounded-lg px-3 py-2.5 text-sm text-[#000000] focus:outline-none focus:border-[#F500A0]"
+                        />
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-[#000000] mb-1">
+                        Paid via
+                      </label>
+                      <select
+                        value={editPaymentMode}
+                        onChange={(e) => setEditPaymentMode(e.target.value)}
+                        className="w-full bg-[#FAFAFA] border border-black/10 rounded-lg px-3 py-2.5 text-sm text-[#000000] focus:outline-none focus:border-[#F500A0] cursor-pointer"
+                      >
+                        {EXPENSE_PAYMENT_MODES.map((m) => (
+                          <option key={m} value={m}>
+                            {m}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-[#000000] mb-1">
+                        Notes (optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={editNotes}
+                        onChange={(e) => setEditNotes(e.target.value)}
+                        placeholder="Reference / supplier / bill no."
+                        className="w-full bg-[#FAFAFA] border border-black/10 rounded-lg px-3 py-2.5 text-sm text-[#000000] focus:outline-none focus:border-[#F500A0]"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-end gap-3 pt-4 border-t border-black/10">
+                      <button
+                        type="button"
+                        onClick={() => setEditingExpense(null)}
+                        disabled={isSavingEditExpense}
+                        className="px-5 py-2.5 rounded-xl border border-black/10 hover:bg-black/5 text-xs font-bold text-[#000000] transition-colors cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isSavingEditExpense}
+                        className="px-6 py-2.5 rounded-xl bg-[#F500A0] hover:bg-[#27272A] disabled:opacity-60 text-white text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-transform active:scale-98 shadow-sm cursor-pointer"
+                      >
+                        {isSavingEditExpense && <Loader2 className="w-4 h-4 animate-spin" />}
+                        {isSavingEditExpense ? "Saving…" : "Save Changes"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -7357,7 +7934,7 @@ export default function POSBilling() {
                     Order Details
                   </h3>
                   <p className="text-sm text-[#000000] font-medium mt-1">
-                    {selectedOrder.id}
+                    {selectedOrder.invoiceNo || selectedOrder.invoice_no || selectedOrder.id}
                   </p>
                 </div>
                 <button
@@ -7547,29 +8124,23 @@ export default function POSBilling() {
               orders={orders as any}
               onViewInvoice={(invId) => {
                 const clean = String(invId || '').replace(/^#/, '');
-                const found = orders.find(o => o.id === invId || o.id === clean || (o.id && o.id.includes(clean)));
+                const found = orders.find(o =>
+                  o.id === invId ||
+                  o.id === clean ||
+                  o.invoiceNo === invId ||
+                  o.invoiceNo === clean ||
+                  o.invoice_no === invId ||
+                  o.invoice_no === clean ||
+                  (o.id && o.id.includes(clean))
+                );
                 setActiveInvoiceData(found || null);
                 setActiveInvoiceId(invId);
               }}
               onPrintInvoice={(invId) => setPrintModalData({ id: invId, type: "invoice" })}
-              onDeleteOrder={(orderId) => void removeOrder(orderId)}
+              onDeleteOrder={(orderId) => void handleDeleteOrder(orderId)}
               onOrdersUpdated={async () => {
-                const fresh = await fetchOrders();
-                setOrders(fresh as any);
+                await fetchData();
               }}
-            />
-          </div>
-        )}
-
-        {/* STORE SETTINGS TAB */}
-        {role === "admin" && activeTab === "store_settings" && (
-          <div className="max-w-7xl mx-auto w-full pb-8">
-            <StoreSettings
-              productsCount={catalog.length}
-              categoriesList={categories.map((c) => ({
-                name: c.name,
-                count: catalog.filter((p) => p.category === c.name).length,
-              }))}
             />
           </div>
         )}

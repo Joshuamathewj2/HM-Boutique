@@ -60,6 +60,12 @@ export type OrderRow = {
   payment_mode: PaymentMode;
   bill_date: string;
   created_at: string;
+  invoice_no?: string;
+  total?: number;
+  amount_paid?: number;
+  balance_due?: number;
+  payment_method?: string;
+  due_date?: string | null;
   coupon_code?: string | null;
   remarks?: string | null;
   reference_number?: string | null;
@@ -67,6 +73,8 @@ export type OrderRow = {
   credit_status?: 'outstanding' | 'paid' | null;
   credit_due_date?: string | null;
   credit_paid_at?: string | null;
+  is_advance?: boolean;
+  order_type?: string;
 };
 
 export type OrderItemRow = {
@@ -80,8 +88,12 @@ export type OrderItemRow = {
 
 export type OrderWithRelations = OrderRow & {
   customer_name: string;
+  customerName?: string;
   customer_phone: string;
+  customerPhone?: string;
+  phone?: string;
   customer_address: string | null;
+  customerAddress?: string | null;
   items: OrderItemRow[];
 };
 

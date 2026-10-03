@@ -29,6 +29,14 @@ const isUuid = (val: unknown): boolean =>
   typeof val === 'string' &&
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
 
+const keyFilter = (id: string, col: string = 'invoice_no'): string => {
+  if (!id || typeof id !== 'string' || !id.trim()) {
+    return `${col}.eq.__invalid_id__`;
+  }
+  const cleanId = id.trim();
+  return isUuid(cleanId) ? `id.eq.${cleanId},${col}.eq.${cleanId}` : `${col}.eq.${cleanId}`;
+};
+
 export const dbStore = {
   // â”€â”€ CATEGORIES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async listCategories(): Promise<Category[]> {
@@ -659,7 +667,7 @@ export const dbStore = {
         const { data } = await supabase
           .from('orders')
           .select('id, invoice_no')
-          .or(`id.eq.${id},invoice_no.eq.${id}`)
+          .or(keyFilter(id))
           .limit(1);
         if (data && data.length > 0) return true;
       } catch {
@@ -684,7 +692,15 @@ export const dbStore = {
           .order('created_at', { ascending: false });
 
         if (!error && data && data.length > 0) {
-          return data.map((o: any) => {
+          // Client-side filter: Exclude active advance orders (PENDING / READY / CANCELLED),
+          // show all regular sales AND advance orders that reached COMPLETED status
+          const visibleOrders = data.filter((o: any) => {
+            const isAdvance = o.is_advance === true || o.order_type === 'ADVANCE';
+            if (!isAdvance) return true; // Standard sale
+            return String(o.status || '').toUpperCase() === 'COMPLETED'; // Completed advance order
+          });
+
+          return visibleOrders.map((o: any) => {
             let items: any[] = [];
             if (Array.isArray(o.items)) {
               items = o.items;
@@ -694,7 +710,7 @@ export const dbStore = {
 
             const mappedItems: OrderItemRow[] = items.map((it: any, idx: number) => ({
               id: String(it.id || `${o.id}-${idx}`),
-              order_id: o.invoice_no || String(o.id),
+              order_id: String(o.id),
               product_id: it.product_id ? String(it.product_id) : null,
               snapshot_name: it.name || it.product_name || 'Item',
               snapshot_price: Number(it.price || it.base_price || it.line_total || 0),
@@ -706,7 +722,9 @@ export const dbStore = {
             const subtotal = Number(o.subtotal || total);
 
             return {
-              id: o.invoice_no || String(o.id),
+              id: String(o.id),
+              invoice_no: o.invoice_no || '',
+              invoiceNo: o.invoice_no || '',
               customer_id: String(o.user_id || o.id),
               customer_name: o.customer_name || 'Counter Customer',
               customer_phone: o.phone || '',
@@ -735,6 +753,8 @@ export const dbStore = {
               credit_status: o.credit_status || (o.is_credit || o.payment_mode === 'CREDIT' || o.payment_method === 'credit' ? 'outstanding' : null),
               credit_due_date: o.credit_due_date || null,
               credit_paid_at: o.credit_paid_at || null,
+              is_advance: Boolean(o.is_advance || o.order_type === 'ADVANCE'),
+              order_type: o.order_type || null,
               items: mappedItems,
             };
           });
@@ -749,6 +769,7 @@ export const dbStore = {
         SELECT o.*, c.name as customer_name, c.phone as customer_phone, c.address as customer_address
         FROM orders o
         JOIN customers c ON c.id = o.customer_id
+        WHERE (o.order_type IS NULL OR o.order_type != 'ADVANCE' OR UPPER(o.status) = 'COMPLETED')
         ORDER BY o.created_at DESC
       `;
 
@@ -762,6 +783,8 @@ export const dbStore = {
 
       return orders.map((o: any) => ({
         ...o,
+        is_advance: Boolean(o.is_advance || o.order_type === 'ADVANCE'),
+        order_type: o.order_type || null,
         items: items.filter((i: any) => i.order_id === o.id) as OrderItemRow[],
       })) as OrderWithRelations[];
     } catch {
@@ -947,13 +970,59 @@ export const dbStore = {
   },
 
   async deleteOrder(id: string): Promise<void> {
+    if (!id || typeof id !== 'string' || !id.trim()) {
+      throw new Error('Invalid order ID provided for deletion.');
+    }
+    const cleanId = id.trim();
     if (isSupabaseConfigured) {
-      try {
-        await supabase.from('orders').delete().or(`invoice_no.eq.${id},id.eq.${id}`);
-        return;
-      } catch (err) {
-        console.warn('Supabase deleteOrder failed:', err);
+      // Resolve the genuine primary key first
+      const { data: found, error: findErr } = await supabase
+        .from('orders')
+        .select('id, invoice_no')
+        .or(keyFilter(cleanId));
+      if (findErr) {
+        console.error('deleteOrder lookup failed:', findErr);
+        throw new Error(findErr.message);
       }
+      const ids = (found || []).map((r: any) => r.id).filter(Boolean);
+      if (ids.length > 0) {
+        // Cascade manually in case FKs lack ON DELETE CASCADE
+        for (const table of ['order_items', 'order_payments', 'payments']) {
+          const col = 'order_id';
+          const vals = ids;
+          if (vals.length === 0) continue;
+          const { error: childErr } = await supabase.from(table).delete().in(col, vals);
+          if (childErr && !/does not exist|schema cache/i.test(childErr.message)) {
+            console.warn(`deleteOrder child cleanup (${table}):`, childErr.message);
+          }
+        }
+        const { data: deleted, error: delErr } = await supabase
+          .from('orders')
+          .delete()
+          .in('id', ids)
+          .select('id');
+        if (delErr) {
+          console.error('deleteOrder failed:', delErr);
+          throw new Error(delErr.message);
+        }
+        if (!deleted || deleted.length === 0) {
+          throw new Error('Delete was blocked (check Supabase RLS DELETE policy on orders).');
+        }
+      } else {
+        // Fallback: try deleting by invoice_no or id directly via keyFilter
+        const { error: fallbackErr } = await supabase
+          .from('orders')
+          .delete()
+          .or(keyFilter(cleanId));
+        if (fallbackErr) {
+          console.error('deleteOrder fallback delete failed:', fallbackErr);
+          throw new Error(fallbackErr.message);
+        }
+      }
+      // Remove matching advance_orders record too
+      const advFilter = isUuid(cleanId) ? `id.eq.${cleanId},deposit_id.eq.${cleanId}` : `deposit_id.eq.${cleanId}`;
+      await supabase.from('advance_orders').delete().or(advFilter);
+      return;
     }
 
     try {
@@ -987,7 +1056,7 @@ export const dbStore = {
     remarks?: string | null;
     referenceNumber?: string | null;
     creditDueDate?: string | null;
-  }): Promise<{ orderId: string }> {
+  }): Promise<{ orderId: string; id?: string; invoiceNo?: string }> {
     const formattedInvoiceNo = payload.orderId.startsWith('INV') ? payload.orderId : `INV-${payload.orderId}`;
     const subtotalInclusive = payload.grandTotal + payload.discountAmount - payload.deliveryFee;
     const isCredit = payload.paymentMode === 'CREDIT';
@@ -1023,16 +1092,21 @@ export const dbStore = {
           address: payload.customerAddress?.trim() || '',
           order_mode: (payload.source || 'OFFLINE').toLowerCase(),
           order_type: 'pos_sale',
-          status: 'completed',
+          status: isCredit ? 'PENDING' : 'COMPLETED',
           subtotal: subtotalInclusive,
           total: payload.grandTotal,
           discount_amount: payload.discountAmount,
           manual_discount_amount: 0,
           total_gst: payload.isGst ? payload.gstAmount : 0,
+          gst_amount: payload.isGst ? payload.gstAmount : 0,
           delivery_charge: payload.deliveryFee,
           payment_mode: payload.paymentMode,
-          payment_method: payload.paymentMode.toLowerCase(),
+          payment_method: isCredit ? 'CREDIT' : payload.paymentMode,
           cash_received: Number(payload.cashReceived) || 0,
+          amount_paid: isCredit ? (Number(payload.cashReceived) || 0) : payload.grandTotal,
+          balance_due: isCredit ? Math.max(0, payload.grandTotal - (Number(payload.cashReceived) || 0)) : 0,
+          due_date: isCredit ? (payload.creditDueDate || null) : null,
+          credit_due_date: isCredit ? (payload.creditDueDate || null) : null,
           split_details: payload.paymentMode === 'SPLIT' ? { cash: Number(payload.splitCash) || 0, gpay: Number(payload.splitGpay) || 0 } : {},
           coupon_code: payload.couponCode || null,
           items: structuredItems,
@@ -1040,18 +1114,36 @@ export const dbStore = {
           reference_number: payload.referenceNumber || null,
           is_credit: isCredit,
           credit_status: isCredit ? 'outstanding' : null,
-          credit_due_date: isCredit ? (payload.creditDueDate || null) : null,
           created_at: createdAtIso,
         };
 
-        const { data, error } = await supabase
+        let { data, error } = await supabase
           .from('orders')
           .insert(orderRow)
-          .select('id, invoice_no')
+          .select()
           .single();
 
+        if (error && (error.code === 'PGRST204' || /amount_paid|balance_due|is_advance/i.test(error.message))) {
+          const { amount_paid, balance_due, is_advance, ...safeRow } = orderRow;
+          const retry = await supabase
+            .from('orders')
+            .insert(safeRow)
+            .select()
+            .single();
+          data = retry.data;
+          error = retry.error;
+        }
+
         if (error) {
-          console.warn('Supabase submitOrder insert error:', error.message, error.details);
+          console.error('Supabase submitOrder insert error:', error.message, error.details);
+          throw new Error(error.message);
+        }
+
+        if (isCredit && data) {
+          if (data.total == null || data.balance_due == null || !data.customer_name) {
+            console.error('Integrity check failed for credit order insert:', data);
+            throw new Error('Credit order failed integrity validation on returned database row');
+          }
         }
 
         if (!error && data) {
@@ -1097,7 +1189,11 @@ export const dbStore = {
             }
           }
 
-          return { orderId: data.invoice_no || formattedInvoiceNo };
+          return {
+            orderId: data.invoice_no || formattedInvoiceNo,
+            id: data.id,
+            invoiceNo: data.invoice_no || formattedInvoiceNo,
+          };
         }
       } catch (err) {
         console.warn('Supabase submitOrder failed, trying SQL fallback:', err);
@@ -1119,7 +1215,7 @@ export const dbStore = {
           cash_received, split_cash, split_gpay, payment_mode, bill_date, created_at,
           is_credit, credit_status, credit_due_date
         ) VALUES (
-          ${payload.orderId}, ${customer.id}, ${payload.source}, 'COMPLETED', ${payload.isGst},
+          ${payload.orderId}, ${customer.id}, ${payload.source}, ${isCredit ? 'PENDING' : 'COMPLETED'}, ${payload.isGst},
           ${subtotalInclusive},
           ${payload.discountType}, ${payload.discountValue}, ${payload.discountAmount},
           ${payload.gstPercentage}, ${payload.gstAmount}, ${payload.deliveryFee},
@@ -1187,6 +1283,7 @@ export const dbStore = {
   },
 
   async addExpense(input: {
+    id?: string;
     title: string;
     category: string;
     amount: number;
@@ -1194,41 +1291,76 @@ export const dbStore = {
     notes: string | null;
     expense_date: string;
   }): Promise<Expense> {
-    const id = uid();
+    const id = input.id || uid();
     if (isSupabaseConfigured) {
       try {
         // Find or create category
         let categoryId = 1;
-        const { data: catData } = await supabase.from('expense_categories').select('id').ilike('name', input.category.trim()).single();
+        const categoryName = input.category.trim() || 'General';
+        const { data: catData } = await supabase
+          .from('expense_categories')
+          .select('id')
+          .ilike('name', categoryName)
+          .maybeSingle();
+
         if (catData) {
           categoryId = catData.id;
         } else {
-          const { data: newCat } = await supabase.from('expense_categories').insert({ name: input.category.trim() }).select('id').single();
+          const { data: newCat, error: newCatErr } = await supabase
+            .from('expense_categories')
+            .insert({ name: categoryName })
+            .select('id')
+            .maybeSingle();
           if (newCat) categoryId = newCat.id;
         }
 
         const { data, error } = await supabase
           .from('expenses')
           .insert({
+            id,
             category_id: categoryId,
             amount: input.amount,
             description: input.notes ? `${input.title} - ${input.notes}` : input.title,
             expense_date: input.expense_date,
           })
-          .select()
-          .single();
+          .select('*, expense_categories(name)')
+          .maybeSingle();
 
         if (!error && data) {
           return {
             id: String(data.id),
             title: input.title,
-            category: input.category,
+            category: data.expense_categories?.name || categoryName,
             amount: Number(data.amount),
-            payment_mode: input.payment_mode,
+            payment_mode: input.payment_mode || 'CASH',
             notes: input.notes,
             expense_date: input.expense_date,
             created_at: data.created_at || new Date().toISOString(),
           };
+        }
+
+        if (error) {
+          // Handle 23505 unique constraint violation gracefully (idempotency conflict)
+          if (error.code === '23505') {
+            const { data: existing } = await supabase
+              .from('expenses')
+              .select('*, expense_categories(name)')
+              .eq('id', id)
+              .maybeSingle();
+            if (existing) {
+              return {
+                id: String(existing.id),
+                title: input.title,
+                category: existing.expense_categories?.name || categoryName,
+                amount: Number(existing.amount),
+                payment_mode: input.payment_mode || 'CASH',
+                notes: input.notes,
+                expense_date: existing.expense_date ? String(existing.expense_date).split('T')[0] : input.expense_date,
+                created_at: existing.created_at || new Date().toISOString(),
+              };
+            }
+          }
+          throw error;
         }
       } catch (err) {
         console.warn('Supabase addExpense failed:', err);
@@ -1262,16 +1394,61 @@ export const dbStore = {
   async updateExpense(id: string, patch: Partial<Expense>): Promise<Expense | null> {
     if (isSupabaseConfigured) {
       try {
-        const payload: Record<string, any> = {};
-        if (patch.amount !== undefined) payload.amount = patch.amount;
+        const payload: Record<string, any> = {
+          updated_at: new Date().toISOString(),
+        };
+        if (patch.amount !== undefined) payload.amount = Number(patch.amount);
         if (patch.expense_date !== undefined) payload.expense_date = patch.expense_date;
         if (patch.title !== undefined || patch.notes !== undefined) {
-          payload.description = `${patch.title || ''} ${patch.notes ? '- ' + patch.notes : ''}`.trim();
+          payload.description = patch.notes ? `${patch.title || ''} - ${patch.notes}`.trim() : (patch.title || '').trim();
         }
 
-        await supabase.from('expenses').update(payload).eq('id', id);
-      } catch {
-        // ignore
+        if (patch.category !== undefined && patch.category.trim()) {
+          const categoryName = patch.category.trim();
+          const { data: catData } = await supabase
+            .from('expense_categories')
+            .select('id')
+            .ilike('name', categoryName)
+            .maybeSingle();
+
+          if (catData) {
+            payload.category_id = catData.id;
+          } else {
+            const { data: newCat } = await supabase
+              .from('expense_categories')
+              .insert({ name: categoryName })
+              .select('id')
+              .maybeSingle();
+            if (newCat) payload.category_id = newCat.id;
+          }
+        }
+
+        const { data, error } = await supabase
+          .from('expenses')
+          .update(payload)
+          .eq('id', id)
+          .select('*, expense_categories(name)')
+          .maybeSingle();
+
+        if (error) {
+          throw new Error(error.message ?? 'Update failed');
+        }
+
+        if (data) {
+          return {
+            id: String(data.id),
+            title: patch.title !== undefined ? patch.title : (data.description || data.expense_categories?.name || 'Expense'),
+            category: data.expense_categories?.name || patch.category || 'General',
+            amount: Number(data.amount || 0),
+            payment_mode: patch.payment_mode || 'CASH',
+            notes: patch.notes !== undefined ? patch.notes : (data.description || null),
+            expense_date: data.expense_date ? String(data.expense_date).split('T')[0] : (patch.expense_date || new Date().toISOString().split('T')[0]),
+            created_at: data.created_at || new Date().toISOString(),
+          };
+        }
+      } catch (err: any) {
+        console.warn('Supabase updateExpense failed:', err);
+        throw err;
       }
     }
 
@@ -1293,10 +1470,20 @@ export const dbStore = {
   async deleteExpense(id: string): Promise<void> {
     if (isSupabaseConfigured) {
       try {
-        await supabase.from('expenses').delete().eq('id', id);
+        const { data, error } = await supabase
+          .from('expenses')
+          .delete()
+          .eq('id', id)
+          .select('id');
+
+        if (error) throw new Error(error.message);
+        if (!data || data.length === 0) {
+          throw new Error('Delete affected 0 rows');
+        }
         return;
-      } catch {
-        // ignore
+      } catch (err: any) {
+        console.warn('Supabase deleteExpense failed:', err);
+        throw err;
       }
     }
 
@@ -1558,14 +1745,17 @@ export const dbStore = {
         // 2. Also dual-persist to orders table with all query reconciliation flags:
         // order_type: 'ADVANCE', invoice_no: DEP-..., status: 'PENDING'
         try {
-          const { error: ordErr } = await supabase.from('orders').insert({
+          const advOrdRow: Record<string, any> = {
             invoice_no: payload.advanceOrderId,
             customer_name: payload.customerName.trim() || 'Guest',
             phone: payload.customerPhone.trim() || '',
             address: payload.customerAddress?.trim() || '',
             order_mode: 'offline',
             order_type: 'ADVANCE',
+            is_advance: true,
             status: 'PENDING',
+            balance_due: Math.max(0, payload.totalAmount - payload.depositAmount),
+            amount_paid: payload.depositAmount,
             subtotal: payload.subtotal,
             total: payload.totalAmount,
             discount_amount: 0,
@@ -1578,13 +1768,19 @@ export const dbStore = {
             notes: payload.notes || null,
             items: structuredItems,
             created_at: new Date().toISOString(),
-          });
+          };
+
+          let { error: ordErr } = await supabase.from('orders').insert(advOrdRow);
+          if (ordErr && (ordErr.code === 'PGRST204' || /amount_paid|balance_due|is_advance/i.test(ordErr.message))) {
+            const { amount_paid, balance_due, is_advance, ...safeAdvOrdRow } = advOrdRow;
+            const retry = await supabase.from('orders').insert(safeAdvOrdRow);
+            ordErr = retry.error;
+          }
           if (ordErr) {
-            console.warn('Supabase orders dual-insert for advance order note:', ordErr.message);
+            console.warn('Supabase orders dual-insert for advance order:', ordErr.message);
           }
         } catch (dualErr) {
-          // non-fatal if table lacks columns
-          console.warn('Supabase orders dual-insert for advance order note:', dualErr);
+          console.warn('Supabase orders dual-insert error:', dualErr);
         }
 
         return { advanceOrderId: payload.advanceOrderId };
@@ -1634,29 +1830,78 @@ export const dbStore = {
     if (isSupabaseConfigured) {
       try {
         const hmStatus = status === 'COMPLETED' ? 'completed' : status === 'CANCELLED' ? 'cancelled' : status === 'READY' ? 'ready_for_delivery' : 'pending_deposit';
-        let qAdv = supabase.from('advance_orders').update({
+
+        // When marked COMPLETED, fetch order total to recognize full payment and zero balance
+        let orderTotal = 0;
+        try {
+          let sel = supabase.from('orders').select('id, total, grand_total');
+          if (isUuid(id)) {
+            sel = sel.or(keyFilter(id));
+          } else {
+            sel = sel.eq('invoice_no', id);
+          }
+          const { data: ordRows } = await sel.limit(1);
+          if (ordRows && ordRows[0]) {
+            orderTotal = Number(ordRows[0].total ?? ordRows[0].grand_total ?? 0);
+          }
+        } catch {
+          // ignore
+        }
+
+        if (!orderTotal) {
+          try {
+            let selAdv = supabase.from('advance_orders').select('id, total_amount');
+            if (isUuid(id)) {
+              selAdv = selAdv.or(keyFilter(id, 'deposit_id'));
+            } else {
+              selAdv = selAdv.eq('deposit_id', id);
+            }
+            const { data: advRows } = await selAdv.limit(1);
+            if (advRows && advRows[0]) {
+              orderTotal = Number(advRows[0].total_amount ?? 0);
+            }
+          } catch {
+            // ignore
+          }
+        }
+
+        const advUpdates: Record<string, any> = {
           status: hmStatus,
+          updated_at: new Date().toISOString(),
           ...(status === 'COMPLETED' ? { completed_at: new Date().toISOString() } : {}),
-        });
+        };
+
+        let qAdv = supabase.from('advance_orders').update(advUpdates);
         if (isUuid(id)) {
-          qAdv = qAdv.or(`deposit_id.eq.${id},id.eq.${id}`);
+          qAdv = qAdv.or(`id.eq.${id},deposit_id.eq.${id}`);
         } else {
           qAdv = qAdv.eq('deposit_id', id);
         }
-        await qAdv;
-      } catch {
-        // ignore
-      }
-      try {
-        let qOrd = supabase.from('orders').update({ status });
+        const { error: advErr } = await qAdv;
+        if (advErr) console.warn('Supabase advance_orders update error:', advErr);
+
+        const ordUpdates: any = {
+          status: status === 'COMPLETED' ? 'COMPLETED' : status,
+          updated_at: new Date().toISOString(),
+        };
+        if (status === 'COMPLETED') {
+          ordUpdates.balance_due = 0;
+          if (orderTotal > 0) {
+            ordUpdates.amount_paid = orderTotal;
+            ordUpdates.cash_received = orderTotal;
+          }
+        }
+
+        let qOrd = supabase.from('orders').update(ordUpdates);
         if (isUuid(id)) {
-          qOrd = qOrd.or(`invoice_no.eq.${id},id.eq.${id}`);
+          qOrd = qOrd.or(keyFilter(id));
         } else {
           qOrd = qOrd.eq('invoice_no', id);
         }
-        await qOrd;
-      } catch {
-        // ignore
+        const { error: ordErr } = await qOrd;
+        if (ordErr) console.warn('Supabase orders advance update error:', ordErr);
+      } catch (e) {
+        console.warn('updateAdvanceOrderStatus error:', e);
       }
     }
 
@@ -1670,9 +1915,12 @@ export const dbStore = {
   async cancelAdvanceOrder(id: string): Promise<void> {
     if (isSupabaseConfigured) {
       try {
-        let qAdv = supabase.from('advance_orders').update({ status: 'cancelled' });
+        let qAdv = supabase.from('advance_orders').update({
+          status: 'cancelled',
+          updated_at: new Date().toISOString(),
+        });
         if (isUuid(id)) {
-          qAdv = qAdv.or(`deposit_id.eq.${id},id.eq.${id}`);
+          qAdv = qAdv.or(`id.eq.${id},deposit_id.eq.${id}`);
         } else {
           qAdv = qAdv.eq('deposit_id', id);
         }
@@ -1681,9 +1929,12 @@ export const dbStore = {
         // ignore
       }
       try {
-        let qOrd = supabase.from('orders').update({ status: 'CANCELLED' });
+        let qOrd = supabase.from('orders').update({
+          status: 'CANCELLED',
+          updated_at: new Date().toISOString(),
+        });
         if (isUuid(id)) {
-          qOrd = qOrd.or(`invoice_no.eq.${id},id.eq.${id}`);
+          qOrd = qOrd.or(keyFilter(id));
         } else {
           qOrd = qOrd.eq('invoice_no', id);
         }
@@ -1709,7 +1960,7 @@ export const dbStore = {
       try {
         let qAdv = supabase.from('advance_orders').delete();
         if (isUuid(id)) {
-          qAdv = qAdv.or(`deposit_id.eq.${id},id.eq.${id}`);
+          qAdv = qAdv.or(keyFilter(id, 'deposit_id'));
         } else {
           qAdv = qAdv.eq('deposit_id', id);
         }
@@ -1720,7 +1971,7 @@ export const dbStore = {
       try {
         let qOrd = supabase.from('orders').delete();
         if (isUuid(id)) {
-          qOrd = qOrd.or(`invoice_no.eq.${id},id.eq.${id}`);
+          qOrd = qOrd.or(keyFilter(id));
         } else {
           qOrd = qOrd.eq('invoice_no', id);
         }
@@ -1799,22 +2050,26 @@ export const dbStore = {
   async markCreditOrderPaid(orderId: string): Promise<void> {
     if (isSupabaseConfigured) {
       try {
-        const { error } = await supabase.rpc('mark_credit_order_paid', { p_order_id: orderId });
-        if (!error) return;
-      } catch {
-        // Fallback to direct update
-      }
-
-      try {
         const paidAt = new Date().toISOString();
+        const { data: ord } = await supabase
+          .from('orders')
+          .select('total, grand_total')
+          .or(keyFilter(orderId))
+          .maybeSingle();
+
+        const orderTotal = Number(ord?.total ?? ord?.grand_total ?? 0);
+
         const { error: directErr } = await supabase
           .from('orders')
           .update({
+            status: 'COMPLETED',
             credit_status: 'paid',
+            balance_due: 0,
+            amount_paid: orderTotal,
             credit_paid_at: paidAt,
             updated_at: paidAt,
           })
-          .or(`id.eq.${orderId},invoice_no.eq.${orderId}`);
+          .or(keyFilter(orderId));
         if (directErr) console.warn('Supabase markCreditOrderPaid direct update failed:', directErr);
       } catch (e) {
         console.warn('Supabase markCreditOrderPaid error:', e);
@@ -1831,7 +2086,7 @@ export const dbStore = {
             credit_due_date: dueDate,
             updated_at: new Date().toISOString(),
           })
-          .or(`id.eq.${orderId},invoice_no.eq.${orderId}`);
+          .or(keyFilter(orderId));
         if (error) console.warn('Supabase updateCreditDueDate failed:', error);
       } catch (e) {
         console.warn('Supabase updateCreditDueDate error:', e);

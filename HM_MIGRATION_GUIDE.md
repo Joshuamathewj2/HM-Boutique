@@ -79,7 +79,7 @@ DATABASE_URL=postgresql://neondb_owner:npg_Vj5S0aRhmcWv@ep-dry-thunder-a1f9435l-
 | `public/manifest.json` | PWA manifest configured for HM Boutique with `#F500A0` and `/logo.png`. |
 | `app/page.tsx` | Rebranded landing directory: HM School of Fashion Designing & Tailoring, Chennai address, course badges, and direct links to POS and Staff Attendance. |
 | `app/pos/actions.ts` | Added server actions: `adjustProductStock`, `checkCoupon`, `fetchCoupons`, `saveCoupon`, `deleteCoupon`, `toggleCouponActive`, `fetchStoreSettings`, `saveStoreSettings`. |
-| `app/pos/admin/secure/control-panel/ss-creatives/page.tsx` | Complete control panel transformation: collapsible sidebar with `#F500A0` Rani pink styling, all 10 tabs, coupon discount integration in cart, SKU and stock adjustment modal in inventory, Cenexa 2026 footer, and alarm triggers. |
+| `app/pos/admin/secure/control-panel/hm-boutique/page.tsx` | Complete control panel transformation: collapsible sidebar with `#F500A0` Rani pink styling, all 10 tabs, coupon discount integration in cart, SKU and stock adjustment modal in inventory, Cenexa 2026 footer, and alarm triggers. |
 | `app/components/Attendance.tsx` | Attendance tracking module: staff roster CRUD, daily punch record, monthly calendar view, and CSV export. |
 | `app/components/StaffPunch.tsx` | Self-service PIN-based staff punch clock. |
 | `app/staff-attendance/page.tsx` | Dedicated kiosk route for staff attendance. |
@@ -115,7 +115,7 @@ npm run dev
 
 ### 3. Application Routes
 - **Storefront**: [http://localhost:3000](http://localhost:3000)
-- **POS & Admin Control Panel**: [http://localhost:3000/pos/admin/secure/control-panel/ss-creatives](http://localhost:3000/pos/admin/secure/control-panel/ss-creatives)
+- **POS & Admin Control Panel**: [http://localhost:3000/pos/admin/secure/control-panel/hm-boutique](http://localhost:3000/pos/admin/secure/control-panel/hm-boutique)
 - **Staff Attendance Portal**: [http://localhost:3000/staff-attendance](http://localhost:3000/staff-attendance)
 - **Digital Invoice**: `http://localhost:3000/invoice/<invoice-id>`
 - **Advance Order Receipt**: `http://localhost:3000/advance/<advance-id>`
