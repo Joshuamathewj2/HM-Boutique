@@ -2,6 +2,8 @@ import { dbStore } from "@/lib/dbStore";
 import { ArrowLeft, FileText } from "lucide-react";
 import Link from "next/link";
 import { AdvanceReceiptActions } from "./AdvanceReceiptActions";
+import { getOrderTotals, numberToWords } from "@/lib/orderTotals";
+import InvoiceTotalsBlock from "@/app/components/InvoiceTotalsBlock";
 
 export const dynamic = "force-dynamic";
 
@@ -41,14 +43,11 @@ export default async function AdvanceReceiptPage({
     );
   }
 
-  const totalNum = Number(advance.total_amount) || 0;
-  const depositNum = Number(advance.deposit_amount) || 0;
-  const balanceNum = Math.max(0, totalNum - depositNum);
-  const depositLabel =
-    advance.deposit_payment_mode === "GPAY" ? "GPay" : "Cash";
+  const totals = getOrderTotals(advance);
+  const isSettled = advance.status === "COMPLETED";
 
   const fmt = (n: number) =>
-    n.toLocaleString("en-IN", {
+    Number(n || 0).toLocaleString("en-IN", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
@@ -103,9 +102,9 @@ export default async function AdvanceReceiptPage({
             advanceId={advance.id}
             customerName={advance.customer_name}
             customerPhone={advance.customer_phone}
-            total={totalNum}
-            deposit={depositNum}
-            balance={balanceNum}
+            total={totals.grandTotal}
+            deposit={totals.paid}
+            balance={totals.balance}
             autoPrint={autoPrint}
           />
         </div>
@@ -141,9 +140,11 @@ export default async function AdvanceReceiptPage({
           <div className="sm:text-right space-y-1.5 shrink-0">
             <div>
               <span className="text-lg font-bold tracking-tight text-zinc-900 uppercase">
-                Advance Receipt
+                {isSettled ? "Invoice" : "Advance Receipt"}
               </span>
-              <p className="text-xs font-mono text-zinc-500">#{advance.id}</p>
+              <p className="text-xs font-mono text-zinc-500">
+                #{isSettled ? ((advance as any).invoice_number || (advance as any).invoice_no || advance.id || "").replace(/^DEP-/i, "INV-") : ((advance as any).invoice_number || (advance as any).invoice_no || advance.id)}
+              </p>
             </div>
             <div className="text-xs text-zinc-600 space-y-0.5 pt-1">
               <div>
@@ -233,9 +234,40 @@ export default async function AdvanceReceiptPage({
           </table>
         </div>
 
-        {/* Totals */}
+        {/* Totals & Breakdown */}
         <div className="border-t border-zinc-200 pt-4 flex flex-col sm:flex-row justify-between items-start gap-8 text-xs">
-          <div className="space-y-4 max-w-sm">
+          <div className="space-y-4 max-w-sm flex-1">
+            <div>
+              <div className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-0.5">
+                Amount in Words
+              </div>
+              <div className="text-xs font-semibold italic text-zinc-800">
+                {numberToWords(totals.grandTotal)}
+              </div>
+            </div>
+
+            {/* Payment & Balance lines for advance orders */}
+            <div className="text-xs space-y-1 pt-1">
+              <div>
+                <span className="text-zinc-500">
+                  {isSettled ? "Amount Paid: " : "Deposit Paid: "}
+                </span>
+                <span className="font-bold text-zinc-900 font-mono">
+                  ₹{fmt(totals.paid)}
+                </span>
+              </div>
+              <div>
+                <span className="text-zinc-500">Balance Due: </span>
+                <span
+                  className={`font-bold font-mono ${
+                    totals.balance === 0 ? "text-emerald-600" : "text-rose-600"
+                  }`}
+                >
+                  ₹{fmt(totals.balance)}
+                </span>
+              </div>
+            </div>
+
             <div className="text-[11px] text-zinc-500 leading-relaxed">
               <p className="font-medium text-zinc-700 mb-0.5">Please note:</p>
               <p>• This is an advance-order deposit receipt, not a final tax invoice.</p>
@@ -243,24 +275,7 @@ export default async function AdvanceReceiptPage({
             </div>
           </div>
 
-          <div className="w-full sm:w-64 space-y-2 text-xs">
-            <div className="flex justify-between text-zinc-600">
-              <span>Order Total</span>
-              <span className="font-mono text-zinc-900">₹{fmt(totalNum)}</span>
-            </div>
-            <div className="flex justify-between text-zinc-600">
-              <span>Deposit Paid ({depositLabel})</span>
-              <span className="font-mono text-zinc-900">− ₹{fmt(depositNum)}</span>
-            </div>
-            <div className="border-t-2 border-b-4 border-double border-zinc-900 py-2 mt-2 flex justify-between items-baseline">
-              <span className="text-sm font-bold text-zinc-900 uppercase">
-                Balance Due
-              </span>
-              <span className="font-mono text-lg font-bold text-zinc-900">
-                ₹{fmt(balanceNum)}
-              </span>
-            </div>
-          </div>
+          <InvoiceTotalsBlock totals={totals} />
         </div>
 
         {advance.notes && (

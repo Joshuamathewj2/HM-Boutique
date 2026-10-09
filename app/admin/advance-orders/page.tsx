@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -24,41 +24,41 @@ import { isUuid } from "@/lib/ids";
 import { toast } from "@/lib/toast";
 import { completeOrder } from "@/lib/completeOrder";
 
+import { getOrderTotals, calculateOrderTotals } from "@/lib/orderTotals";
+
 export const dynamic = "force-dynamic";
 
 interface AdvanceOrderItem {
-  id?: string;
-  snapshot_name?: string;
-  product_name?: string;
-  snapshot_price?: number;
-  quantity?: number;
+  id: string;
+  snapshot_name: string;
+  snapshot_price: number;
+  quantity: number;
 }
 
 interface AdvanceOrderRecord {
-  id: string; // Real database UUID
-  deposit_id?: string;
+  id: string;
   invoice_no?: string;
   invoiceNo?: string;
-  customer_name?: string;
-  phone?: string;
-  customer_phone?: string;
-  address?: string;
-  product_name?: string;
+  customer_name?: string | null;
+  customer_phone?: string | null;
+  phone?: string | null;
+  status: string;
+  subtotal: number;
   total_amount?: number;
   total?: number;
   grand_total?: number;
   deposit_amount?: number;
   amount_paid?: number;
-  remaining_balance?: number;
-  balance_due?: number;
-  status: AdvanceOrderStatus;
-  expected_delivery_date?: string;
-  delivery_date?: string;
-  created_at: string;
-  updated_at?: string;
-  remarks?: string;
-  products?: AdvanceOrderItem[];
+  is_gst?: boolean;
+  gst_percentage?: number;
+  gst_amount?: number;
+  discount_amount?: number;
+  discount_type?: string;
+  discount_value?: number;
+  delivery_fee?: number;
   items?: AdvanceOrderItem[];
+  order_items?: AdvanceOrderItem[];
+  created_at: string;
 }
 
 export default function AdminAdvanceOrdersPage() {
@@ -67,11 +67,13 @@ export default function AdminAdvanceOrdersPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [statusFilter, setStatusFilter] = useState<"ALL" | AdvanceOrderStatus>("ALL");
+  const [statusFilter, setStatusFilter] = useState<
+    "ALL" | "PENDING" | "READY" | "COMPLETED" | "CANCELLED"
+  >("ALL");
 
-  const isMutatingRef = React.useRef(false);
-  const lastMutationAtRef = React.useRef(0);
-  const fetchSeqRef = React.useRef(0);
+  const fetchSeqRef = useRef<number>(0);
+  const isMutatingRef = useRef<boolean>(false);
+  const lastMutationAtRef = useRef<number>(0);
 
   const formatINR = (val: number) =>
     Number(val || 0).toLocaleString("en-IN", {
@@ -95,8 +97,8 @@ export default function AdminAdvanceOrdersPage() {
       // Single source of truth: public.orders
       const { data, error } = await supabase
         .from("orders")
-        .select("*")
-        .or("is_advance.eq.true,order_type.eq.ADVANCE,invoice_no.like.DEP-%")
+        .select("*, order_items(*)")
+        .or("order_type.eq.ADVANCE,order_type.eq.advance,is_advance.eq.true,invoice_no.ilike.DEP-%")
         .order("created_at", { ascending: false });
 
       if (seq !== fetchSeqRef.current) return; // Stale fetch response, ignore
@@ -145,10 +147,19 @@ export default function AdminAdvanceOrdersPage() {
       if (newStatus === STATUS.COMPLETED) {
         updatedRow = await completeOrder(supabase, o);
       } else {
+        const totals = getOrderTotals(o);
+        const originalDeposit = Number(o.deposit_amount ?? o.amount_paid ?? 0);
+        const newPaid = originalDeposit;
+        const newBalance = newStatus === STATUS.CANCELLED ? 0 : Math.max(0, totals.grandTotal - newPaid);
+
         const { data, error } = await supabase
           .from("orders")
           .update({
             status: newStatus,
+            credit_status: 'outstanding',
+            amount_paid: newPaid,
+            cash_received: newPaid,
+            balance_due: newBalance,
             updated_at: new Date().toISOString(),
           })
           .eq("id", o.id)
@@ -159,6 +170,15 @@ export default function AdminAdvanceOrdersPage() {
           throw new Error(error?.message ?? "Update affected 0 rows (check RLS)");
         }
         updatedRow = data;
+
+        // Best effort sync with advance_orders table
+        try {
+          const hmStatus = newStatus === 'READY' ? 'ready_for_delivery' : newStatus === 'CANCELLED' ? 'cancelled' : 'pending_deposit';
+          await supabase
+            .from('advance_orders')
+            .update({ status: hmStatus, updated_at: new Date().toISOString() })
+            .or(`id.eq.${o.id},deposit_id.eq.${o.invoice_no || o.id}`);
+        } catch {}
       }
 
       // Replace row in state with returned DB row and refresh router
@@ -178,35 +198,46 @@ export default function AdminAdvanceOrdersPage() {
   };
 
   // Filter advance orders based on active status filter & search query
-  const filteredOrders = advanceOrders.filter((a) => {
-    if (statusFilter !== "ALL" && (a.status || "").toUpperCase() !== statusFilter) {
-      return false;
-    }
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      const idMatch = (a.id || "").toLowerCase().includes(q);
-      const nameMatch = (a.customer_name || "").toLowerCase().includes(q);
-      const phoneMatch = (a.phone || a.customer_phone || "").toLowerCase().includes(q);
-      return idMatch || nameMatch || phoneMatch;
-    }
-    return true;
-  });
+  const filteredOrders = useMemo(() => {
+    return advanceOrders.filter((a) => {
+      if (statusFilter !== "ALL" && (a.status || "").toUpperCase() !== statusFilter) {
+        return false;
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const idMatch = (a.id || "").toLowerCase().includes(q) || (a.invoice_no || a.invoiceNo || "").toLowerCase().includes(q);
+        const nameMatch = (a.customer_name || "").toLowerCase().includes(q);
+        const phoneMatch = (a.phone || a.customer_phone || "").toLowerCase().includes(q);
+        return idMatch || nameMatch || phoneMatch;
+      }
+      return true;
+    });
+  }, [advanceOrders, statusFilter, searchQuery]);
 
-  const countPending = advanceOrders.filter((a) => (a.status || "").toUpperCase() === "PENDING").length;
-  const countReady = advanceOrders.filter((a) => (a.status || "").toUpperCase() === "READY").length;
-  const countCompleted = advanceOrders.filter((a) => (a.status || "").toUpperCase() === "COMPLETED").length;
-  const countCancelled = advanceOrders.filter((a) => (a.status || "").toUpperCase() === "CANCELLED").length;
+  const countPending = useMemo(
+    () => filteredOrders.filter((a: AdvanceOrderRecord) => (a.status || "").toUpperCase() === "PENDING").length,
+    [filteredOrders]
+  );
+  const countReady = useMemo(
+    () => filteredOrders.filter((a: AdvanceOrderRecord) => (a.status || "").toUpperCase() === "READY").length,
+    [filteredOrders]
+  );
+  const countCompleted = useMemo(
+    () => filteredOrders.filter((a: AdvanceOrderRecord) => (a.status || "").toUpperCase() === "COMPLETED").length,
+    [filteredOrders]
+  );
+  const countCancelled = advanceOrders.filter((a: AdvanceOrderRecord) => (a.status || "").toUpperCase() === "CANCELLED").length;
 
-  // Real-time Outstanding Balance from active (PENDING / READY) orders
-  const pendingOrders = advanceOrders.filter((a) => {
-    const st = (a.status || "PENDING").toUpperCase();
-    return st === "PENDING" || st === "READY";
-  });
-  const outstandingBalance = pendingOrders.reduce((sum, a) => {
-    const tot = Number(a.total_amount ?? a.total ?? a.grand_total ?? 0);
-    const paid = Number(a.deposit_amount ?? a.amount_paid ?? 0);
-    return sum + Math.max(0, tot - paid);
-  }, 0);
+  // Real-time Outstanding Balance from active (PENDING / READY) orders only
+  const outstandingBalance = useMemo(() => {
+    return filteredOrders.reduce((sum: number, a: AdvanceOrderRecord) => {
+      const st = (a.status || "").toUpperCase();
+      if (st === "PENDING" || st === "READY") {
+        return sum + getOrderTotals(a).balance;
+      }
+      return sum;
+    }, 0);
+  }, [filteredOrders]);
 
   return (
     <div className="min-h-screen bg-[#FFF0F8] text-[#111111] font-sans p-4 sm:p-8">
@@ -272,7 +303,7 @@ export default function AdminAdvanceOrdersPage() {
                 ₹{formatINR(outstandingBalance)}
               </p>
               <p className="text-[10px] text-gray-400 mt-0.5">
-                {pendingOrders.length} pending / ready orders awaiting balance
+                {countPending + countReady} pending / ready orders awaiting balance
               </p>
             </div>
             <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center text-rose-600">
@@ -374,13 +405,8 @@ export default function AdminAdvanceOrdersPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredOrders.map((a) => {
-                    const totalVal = Number(a.total_amount ?? a.total ?? a.grand_total ?? 0);
-                    const paidVal = Number(a.deposit_amount ?? a.amount_paid ?? 0);
-                    const balDue = (a.status || "").toUpperCase() === "COMPLETED"
-                      ? 0
-                      : Math.max(0, totalVal - paidVal);
-
+                  filteredOrders.map((a: AdvanceOrderRecord) => {
+                    const totals = getOrderTotals(a);
                     const statusUpper = (a.status || "PENDING").toUpperCase();
 
                     return (
@@ -399,13 +425,13 @@ export default function AdminAdvanceOrdersPage() {
                           )}
                         </td>
                         <td className="px-4 py-3 text-right font-mono text-gray-900 font-bold">
-                          ₹{formatINR(totalVal)}
+                          ₹{formatINR(totals.grandTotal)}
                         </td>
                         <td className="px-4 py-3 text-right font-mono text-emerald-600 font-bold">
-                          ₹{formatINR(paidVal)}
+                          ₹{formatINR(totals.paid)}
                         </td>
                         <td className="px-4 py-3 text-right font-mono font-black text-rose-600">
-                          ₹{formatINR(balDue)}
+                          ₹{formatINR(totals.balance)}
                         </td>
                         <td className="px-4 py-3 text-center">
                           <select
@@ -429,7 +455,7 @@ export default function AdminAdvanceOrdersPage() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex items-center justify-end gap-1.5">
-                            {balDue > 0 && statusUpper !== STATUS.COMPLETED && (
+                            {totals.balance > 0 && statusUpper !== STATUS.COMPLETED && (
                               <button
                                 type="button"
                                 onClick={() => handleStatusChange(a.id, STATUS.COMPLETED, a)}

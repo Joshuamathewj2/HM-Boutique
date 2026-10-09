@@ -108,7 +108,9 @@ export default function InvoiceModal({
     printWindow.document.close();
   };
 
-  const orderId = order?.id || invoiceId || "—";
+  const rawId = order?.invoice_no || order?.invoiceNo || order?.id || invoiceId || "—";
+  const isCompleted = String(order?.status || "").toUpperCase() === "COMPLETED";
+  const orderId = isCompleted ? String(rawId).replace(/^DEP-/i, "INV-") : rawId;
   const items: any[] = order?.items || [];
   const paymentMode = String(order?.paymentMode || order?.payment_mode || "CASH").toUpperCase();
   const isCredit = Boolean(order?.is_credit || paymentMode === "CREDIT" || order?.payment_method === "credit");

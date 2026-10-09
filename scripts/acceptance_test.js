@@ -80,17 +80,17 @@ async function runAcceptanceTests() {
     completed_at: new Date().toISOString()
   }).eq('id', adv2.id).select().single();
 
-  // Check if satisfies Order History filter: completed sales
+  // Check if satisfies Order History filter: is_advance=true AND status=COMPLETED
   const { data: histCheck } = await supabase.from('orders').select('*')
+    .or('is_advance.is.null,is_advance.eq.false,and(is_advance.eq.true,status.eq.COMPLETED)')
     .eq('id', ord2.id);
-  const visibleInHistory = histCheck && histCheck.length === 1 && histCheck[0].status === 'COMPLETED';
 
   // Check Analytics query filter: status.eq.COMPLETED,status.eq.completed
   const { data: analyticsCheck } = await supabase.from('orders').select('*')
     .or('status.eq.COMPLETED,status.eq.completed')
     .eq('id', ord2.id);
 
-  const test2Pass = updOrd2?.status === 'COMPLETED' && visibleInHistory && analyticsCheck && analyticsCheck.length === 1;
+  const test2Pass = updOrd2?.status === 'COMPLETED' && histCheck && histCheck.length === 1 && analyticsCheck && analyticsCheck.length === 1;
   console.log('Order status after completion:', updOrd2?.status, 'in History:', histCheck?.length, 'in Analytics:', analyticsCheck?.length, '-> TEST 2:', test2Pass ? 'PASS' : 'FAIL');
 
   // Clean up Test 2

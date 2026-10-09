@@ -96,6 +96,7 @@ import InvoiceModal from "@/app/components/InvoiceModal";
 import { checkCoupon, adjustProductStock, seedCatalog } from "@/app/pos/actions";
 import { BRAND_EN, BRAND_ADDRESS, BRAND_PHONE_DISPLAY, BRAND_LOGO, DEFAULT_SHOP_PROFILE } from "@/lib/brand";
 import { calculateTaxAndTotals, formatINR } from "@/lib/money";
+import { getOrderTotals, calculateOrderTotals } from "@/lib/orderTotals";
 import { ORDER_STATUS } from "@/lib/orderStatus";
 import { normalizeOrder } from "@/lib/normalizeOrder";
 
@@ -459,11 +460,10 @@ export default function POSBilling() {
 
   const [selectedAdvance, setSelectedAdvance] = useState<AdvanceOrderWithRelations | null>(null);
   const [advanceViewMode, setAdvanceViewMode] = useState<"view" | "receive" | null>(null);
-  const [receiveDiscountType, setReceiveDiscountType] = useState<"FIXED" | "PERCENT">("FIXED");
-  const [receiveDiscountValue, setReceiveDiscountValue] = useState<number | "">("");
   const [receivePaymentMode, setReceivePaymentMode] = useState<OrderPaymentMode>("CASH");
-  const [receiveIsGst, setReceiveIsGst] = useState(false);
-  const [receiveGstPct, setReceiveGstPct] = useState<number>(18);
+  const [receiveDiscountValue, setReceiveDiscountValue] = useState<number>(0);
+  const [receiveDiscountType, setReceiveDiscountType] = useState<"fixed" | "percent">("fixed");
+  const [receiveIsGst, setReceiveIsGst] = useState<boolean>(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
 
   const [advSearchQuery, setAdvSearchQuery] = useState("");
@@ -1327,6 +1327,13 @@ export default function POSBilling() {
         depositPaymentMode: advDepositPaymentMode,
         deliveryDate: advDeliveryDate || null,
         notes: advNotes.trim() || null,
+        isGst: applyGST,
+        gstPercentage: applyGST ? Number(gstPercentage) || 0 : 0,
+        gstAmount: applyGST ? Number(gstAmount) || 0 : 0,
+        discountAmount: calculatedDiscount,
+        discountType: discountType === "percent" ? "PERCENT" : "FIXED",
+        discountValue: Number(discountValue) || 0,
+        deliveryFee: Number(deliveryFee) || 0,
         items: items.map((i) => ({
           product_id: i.product_id || null,
           snapshot_name: i.name,
@@ -1376,11 +1383,11 @@ export default function POSBilling() {
   const openReceiveBalance = (adv: AdvanceOrderWithRelations) => {
     setSelectedAdvance(adv);
     setAdvanceViewMode("receive");
-    setReceiveDiscountType("FIXED");
-    setReceiveDiscountValue("");
     setReceivePaymentMode("CASH");
-    setReceiveIsGst(false);
-    setReceiveGstPct(18);
+    setReceiveDiscountValue(0);
+    setReceiveDiscountType("fixed");
+    const advTotals = getOrderTotals(adv);
+    setReceiveIsGst(advTotals.gstAmount > 0 || Boolean(adv.is_gst));
   };
 
   const openAdvanceView = (adv: AdvanceOrderWithRelations) => {
@@ -1394,88 +1401,118 @@ export default function POSBilling() {
   };
 
   const balanceRemaining = (adv: AdvanceOrderWithRelations) =>
-    Math.max(0, Number(adv.total_amount) - Number(adv.deposit_amount));
-
-  const receiveBalanceDiscountAmount = (() => {
-    if (!selectedAdvance) return 0;
-    const base = balanceRemaining(selectedAdvance);
-    const val = Number(receiveDiscountValue) || 0;
-    return receiveDiscountType === "PERCENT" ? base * (val / 100) : val;
-  })();
-
-  const receiveBalanceFinalAmount = (() => {
-    if (!selectedAdvance) return 0;
-    return Math.max(0, balanceRemaining(selectedAdvance) - receiveBalanceDiscountAmount);
-  })();
+    getOrderTotals(adv).balance;
 
   const confirmReceiveBalance = async () => {
     if (!selectedAdvance || isFinalizing) return;
-    if (receiveBalanceDiscountAmount > balanceRemaining(selectedAdvance)) {
-      alert("Discount cannot exceed the remaining balance.");
-      return;
-    }
     setIsFinalizing(true);
     try {
-      const invoiceId = `INV-${new Date().getFullYear()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+      const existingInv = (selectedAdvance as any).invoice_number || (selectedAdvance as any).invoice_no || selectedAdvance.id;
+      const invoiceId = (existingInv && String(existingInv).startsWith("DEP-"))
+        ? String(existingInv).replace(/^DEP-/i, "INV-")
+        : (existingInv && String(existingInv).startsWith("INV-") ? existingInv : `INV-${new Date().getFullYear()}-${Math.random().toString(36).substr(2, 5).toUpperCase()}`);
+
+      const advTotals = getOrderTotals(selectedAdvance);
+      const cappedDiscount = advTotals.discount;
+      const finalGrandTotal = advTotals.grandTotal;
+      const advancePaidEarlier = advTotals.paid;
+      const finalAmountPaidNow = advTotals.balance;
+
+      const advItems = selectedAdvance.items.map((i, idx) => ({
+        id: `oi-${invoiceId}-${idx}`,
+        product_id: i.product_id || null,
+        name: i.snapshot_name,
+        snapshot_name: i.snapshot_name,
+        desc: i.snapshot_desc || "",
+        price: Number(i.snapshot_price) || 0,
+        snapshot_price: Number(i.snapshot_price) || 0,
+        qty: Number(i.quantity) || 1,
+        quantity: Number(i.quantity) || 1,
+      }));
+
+      const nowIso = new Date().toISOString();
+
+      // Persist to backend first! If this throws, execution jumps to catch and popup stays open
       await finalizeAdvanceOrder({
         advanceOrderId: selectedAdvance.id,
         invoiceId,
-        isGst: receiveIsGst,
-        gstPercentage: receiveIsGst ? receiveGstPct : 0,
-        discountType: receiveDiscountType,
-        discountValue: Number(receiveDiscountValue) || 0,
-        discountAmount: receiveBalanceDiscountAmount,
-        deliveryFee: 0,
+        isGst: advTotals.gstAmount > 0,
+        gstPercentage: advTotals.gstPercent,
+        discountType: advTotals.discountType,
+        discountValue: advTotals.discountValue,
+        discountAmount: cappedDiscount,
+        deliveryFee: advTotals.deliveryFee,
         paymentMode: receivePaymentMode,
-        billDate: new Date().toISOString(),
+        billDate: nowIso,
       });
-      closeAdvanceDialog();
-      await fetchData();
 
-      // Open the shared completion modal (Print / WhatsApp / New Sale) for the new invoice.
-      try {
-        const created = await fetchOrderById(invoiceId);
-        if (created) {
-          setCompletedBillData({
-            id: created.id,
-            customerName: created.customer_name || "Guest",
-            customerPhone: created.customer_phone,
-            customerAddress: created.customer_address || null,
-            source: created.source,
-            isGst: Boolean(created.is_gst),
-            items: created.items.map((i, idx) => ({
-              id: i.id || `oi-${created.id}-${idx}`,
-              name: i.snapshot_name,
-              desc: "",
-              price: Number(i.snapshot_price) || 0,
-              qty: Number(i.quantity) || 0,
-            })),
-            subtotal: Number(created.subtotal) || 0,
-            discount: Number(created.discount_amount) || 0,
-            discountType: created.discount_type,
-            discountValue: created.discount_value
-              ? Number(created.discount_value)
-              : undefined,
-            gstPercentage: Number(created.gst_percentage) || 0,
-            gstAmount: Number(created.gst_amount) || 0,
-            deliveryFee: Number(created.delivery_fee) || 0,
-            grandTotal: Number(created.grand_total) || 0,
-            cashReceived: Number(created.cash_received) || 0,
-            splitCash: Number((created as { split_cash?: number }).split_cash) || 0,
-            splitGpay: Number((created as { split_gpay?: number }).split_gpay) || 0,
-            paymentMode: (POS_PAYMENT_MODES as readonly string[]).includes(
-              String(created.payment_mode),
-            )
-              ? (created.payment_mode as OrderPaymentMode)
-              : "CASH",
-            date: created.bill_date,
-            createdAt: created.created_at,
-            status: "Completed",
-          });
-        }
-      } catch (mapErr) {
-        console.error("Could not open completion modal:", mapErr);
-      }
+      const mappedOrder: any = normalizeOrder({
+        id: invoiceId,
+        invoice_no: invoiceId,
+        invoiceNo: invoiceId,
+        customerName: (selectedAdvance.customer_name || "Guest").trim(),
+        customer_name: (selectedAdvance.customer_name || "Guest").trim(),
+        customerPhone: selectedAdvance.customer_phone || "",
+        customer_phone: selectedAdvance.customer_phone || "",
+        phone: selectedAdvance.customer_phone || "",
+        customerAddress: selectedAdvance.customer_address || null,
+        customer_address: selectedAdvance.customer_address || null,
+        source: "OFFLINE",
+        isGst: advTotals.gstAmount > 0,
+        items: advItems,
+        subtotal: advTotals.subtotal,
+        discount: cappedDiscount,
+        discount_amount: cappedDiscount,
+        discountType: advTotals.discountType,
+        discountValue: advTotals.discountValue,
+        gstPercentage: advTotals.gstPercent,
+        gst_percentage: advTotals.gstPercent,
+        gstAmount: advTotals.gstAmount,
+        gst_amount: advTotals.gstAmount,
+        deliveryFee: advTotals.deliveryFee,
+        delivery_fee: advTotals.deliveryFee,
+        grandTotal: finalGrandTotal,
+        grand_total: finalGrandTotal,
+        total: finalGrandTotal,
+        cashReceived: finalAmountPaidNow,
+        cash_received: finalAmountPaidNow,
+        actualAmountReceived: finalAmountPaidNow,
+        advancePaidEarlier: advancePaidEarlier,
+        changeReturned: 0,
+        amount_paid: finalGrandTotal,
+        balance_due: 0,
+        paymentMode: receivePaymentMode,
+        payment_mode: receivePaymentMode,
+        payment_method: receivePaymentMode,
+        date: nowIso,
+        bill_date: nowIso,
+        createdAt: nowIso,
+        created_at: nowIso,
+        status: ORDER_STATUS.COMPLETED,
+        referenceNumber: selectedAdvance.id,
+      });
+
+      // Update local advance orders state so status shows COMPLETED and balance settles to 0 immediately
+      setAdvanceOrders((prev) =>
+        prev.map((item) =>
+          item.id === selectedAdvance.id
+            ? {
+                ...item,
+                status: "COMPLETED" as AdvanceOrderStatus,
+                deposit_amount: finalGrandTotal,
+                remaining_balance: 0,
+                finalized_order_id: invoiceId,
+              }
+            : item
+        )
+      );
+
+      // Add to orders history and open Bill Generated popup immediately
+      setOrders((prev) => [mappedOrder, ...prev.filter((o) => o.id !== invoiceId)]);
+      setCompletedBillData(mappedOrder);
+      closeAdvanceDialog();
+
+      await fetchData();
     } catch (err) {
       console.error("Failed to finalize advance order:", err);
       alert("Could not finalize the advance order. Please try again.");
@@ -3553,6 +3590,21 @@ export default function POSBilling() {
                   </span>
                 </div>
 
+                {/* Only extra allowed: one small row "Advance Paid (earlier)" showing previous advance */}
+                {(completedBillData as any).advancePaidEarlier > 0 && (
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-semibold text-gray-600">
+                      Advance Paid (earlier)
+                    </span>
+                    <span className="text-sm font-bold text-black">
+                      ₹
+                      {Number((completedBillData as any).advancePaidEarlier).toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                      })}
+                    </span>
+                  </div>
+                )}
+
                 {completedBillData.paymentMode === "SPLIT" && (
                   <>
                     <div className="flex justify-between items-center text-xs">
@@ -3586,29 +3638,34 @@ export default function POSBilling() {
                       ? "Paid via GPay"
                       : completedBillData.paymentMode === "SPLIT"
                         ? "Total Received"
-                        : "Amount Received"}
+                        : (completedBillData as any).advancePaidEarlier > 0
+                          ? "Actual Amount Received"
+                          : "Amount Received"}
                   </span>
                   <span className="text-sm font-black text-black">
                     ₹
                     {(
-                      completedBillData.cashReceived ||
+                      (completedBillData as any).actualAmountReceived ??
+                      completedBillData.cashReceived ??
                       completedBillData.grandTotal
                     ).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </span>
                 </div>
 
-                {/* Balance Returned Box — cash change only */}
+                {/* Change Returned Box — cash change only */}
                 {completedBillData.paymentMode !== "GPAY" && (
                   <div className="bg-[#F4F4F5] border border-[#E4E4E7] rounded-lg p-3 sm:p-3.5 flex justify-between items-center mt-1">
                     <span className="text-xs font-bold text-[#7C5A52]">
-                      Balance Returned
+                      Change Returned
                     </span>
                     <span className="text-base sm:text-lg font-black text-[#7C5A52]">
                       ₹
                       {Math.max(
                         0,
-                        (completedBillData.cashReceived || 0) -
-                          completedBillData.grandTotal,
+                        (completedBillData as any).changeReturned ??
+                          ((completedBillData.cashReceived || 0) > completedBillData.grandTotal
+                            ? (completedBillData.cashReceived || 0) - completedBillData.grandTotal
+                            : 0)
                       ).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </span>
                   </div>
@@ -3616,7 +3673,7 @@ export default function POSBilling() {
               </div>
 
               {/* Action Buttons Bar */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
                 <button
                   onClick={() => setPrintModalData({ id: completedBillData.id, type: "invoice" })}
                   className="bg-white border border-gray-300 hover:bg-gray-50 text-black py-2.5 px-3 rounded-lg font-bold text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
@@ -3648,7 +3705,10 @@ export default function POSBilling() {
                   WhatsApp Invoice
                 </button>
                 <button
-                  onClick={() => setCompletedBillData(null)}
+                  onClick={() => {
+                    setCompletedBillData(null);
+                    setActiveTab("billing");
+                  }}
                   className="bg-black hover:bg-black/80 text-white py-2.5 px-3 rounded-lg font-bold text-[10px] uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-sm transition-colors cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
@@ -4818,67 +4878,240 @@ export default function POSBilling() {
         {selectedAdvance && advanceViewMode && (
           <div className="fixed inset-0 z-[400] flex items-center justify-center p-3 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-5 max-h-[92vh] overflow-y-auto animate-in zoom-in-95 duration-200">
-              <div className="flex justify-between items-center pb-3 border-b border-black/10">
-                <div>
-                  <p className="text-[11px] font-mono font-bold text-[#F500A0]">{selectedAdvance.id}</p>
-                  <h3 className="text-lg font-black text-[#000000] tracking-tight">
-                    {advanceViewMode === "receive" ? "Receive Remaining Payment" : "Advance Order Details"}
-                  </h3>
-                </div>
-                <button onClick={closeAdvanceDialog} className="text-black hover:bg-black/5 w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
+              {advanceViewMode === "receive" ? (
+                (() => {
+                  const selTotals = calculateOrderTotals(selectedAdvance);
+                  const storedTotal = selTotals.total;
+                  const storedPaid = selTotals.paid;
+                  const storedBalance = selTotals.balance;
+                  const finalAmountToCollect = storedBalance;
 
-              {/* Customer + Items summary (both modes) */}
-              <div className="mt-4 space-y-3">
-                <div className="bg-[#F9FAFB] border border-black/10 rounded-lg p-3">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-[#7C5A52]">Customer</p>
-                  <p className="text-sm font-black text-black">{selectedAdvance.customer_name}</p>
-                  <p className="text-[11px] font-bold text-[#7C5A52]">{selectedAdvance.customer_phone}</p>
-                  {selectedAdvance.customer_address && (
-                    <p className="text-[11px] text-[#7C5A52] mt-0.5">{selectedAdvance.customer_address}</p>
-                  )}
-                </div>
-
-                <div className="border border-black/10 rounded-lg divide-y divide-black/5">
-                  {selectedAdvance.items.map((it) => (
-                    <div key={it.id} className="flex justify-between items-center p-2.5 text-xs">
-                      <div>
-                        <p className="font-bold text-black">{it.snapshot_name}</p>
-                        <p className="text-[10px] text-[#7C5A52]">Qty: {it.quantity} × ₹{Number(it.snapshot_price).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                  return (
+                    <div className="space-y-4">
+                      {/* Header */}
+                      <div className="flex justify-between items-start pb-3 border-b border-black/10">
+                        <div>
+                          <p className="text-[11px] font-mono font-bold text-[#1e3a8a]">{selectedAdvance.id}</p>
+                          <h3 className="text-xl font-black text-black tracking-tight mt-0.5">
+                            Receive Remaining Payment
+                          </h3>
+                        </div>
+                        <button
+                          onClick={closeAdvanceDialog}
+                          className="text-black hover:bg-black/5 w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer transition-colors"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
                       </div>
-                      <p className="font-black text-black">₹{(Number(it.snapshot_price) * it.quantity).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+
+                      {/* Customer card */}
+                      <div className="bg-white border border-slate-200 rounded-xl p-3.5">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-[#7C5A52]">CUSTOMER</p>
+                        <p className="text-sm font-extrabold text-black mt-0.5">{selectedAdvance.customer_name || "Guest"}</p>
+                        <p className="text-xs font-semibold text-slate-600 mt-0.5">{selectedAdvance.customer_phone || "—"}</p>
+                      </div>
+
+                      {/* Product card */}
+                      <div className="bg-white border border-slate-200 rounded-xl p-3.5 divide-y divide-slate-100">
+                        {selectedAdvance.items.map((it) => (
+                          <div key={it.id} className="flex justify-between items-center py-1.5 first:pt-0 last:pb-0 text-xs">
+                            <div>
+                              <p className="text-sm font-extrabold text-black">{it.snapshot_name}</p>
+                              <p className="text-xs text-slate-500 mt-0.5">
+                                Qty: {it.quantity} × ₹{Number(it.snapshot_price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </p>
+                            </div>
+                            <p className="text-sm font-extrabold text-black">
+                              ₹{(Number(it.snapshot_price) * it.quantity).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Three summary boxes in one row */}
+                      <div className="grid grid-cols-3 gap-2.5 text-center mb-4">
+                        <div className="bg-[#F8FAFC] border border-slate-200 rounded-xl p-2.5">
+                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">TOTAL</p>
+                          <p className="text-base font-black text-black mt-0.5">
+                            ₹{storedTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                        <div className="bg-[#ECFDF5] border border-emerald-200 rounded-xl p-2.5">
+                          <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider">PAID</p>
+                          <p className="text-base font-black text-emerald-700 mt-0.5">
+                            ₹{storedPaid.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                        <div className="bg-[#FEF2F2] border border-rose-200 rounded-xl p-2.5">
+                          <p className="text-[10px] font-bold text-rose-600 uppercase tracking-wider">BALANCE</p>
+                          <p className="text-base font-black text-rose-600 mt-0.5">
+                            ₹{storedBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* PAYMENT METHOD */}
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-800 tracking-wide uppercase mb-1.5">
+                          PAYMENT METHOD
+                        </label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setReceivePaymentMode("CASH")}
+                            className={`py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                              receivePaymentMode === "CASH"
+                                ? "bg-[#334E68] text-white shadow-xs"
+                                : "bg-white border border-slate-200 text-slate-700 hover:border-slate-400"
+                            }`}
+                          >
+                            CASH
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setReceivePaymentMode("GPAY")}
+                            className={`py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                              receivePaymentMode === "GPAY"
+                                ? "bg-[#334E68] text-white shadow-xs"
+                                : "bg-white border border-slate-200 text-slate-700 hover:border-slate-400"
+                            }`}
+                          >
+                            GPAY
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* FINAL AMOUNT TO COLLECT */}
+                      <div className="bg-[#DCFCE7] border border-emerald-200 rounded-2xl p-4 text-center">
+                        <p className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">
+                          FINAL AMOUNT TO COLLECT
+                        </p>
+                        <p className="text-3xl font-black text-emerald-800 tracking-tight mt-1">
+                          ₹{finalAmountToCollect.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                      </div>
+
+                      {/* Yellow info note */}
+                      <div className="bg-[#FEF9C3] border border-[#FDE047] rounded-xl p-3 text-xs text-[#854D0E] font-medium leading-relaxed">
+                        Confirmation marks the order Completed, creates one official invoice, and recognizes the full ₹{storedTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} as revenue.
+                      </div>
+
+                      {/* CONFIRM FINAL PAYMENT button */}
+                      <button
+                        type="button"
+                        onClick={confirmReceiveBalance}
+                        disabled={isFinalizing}
+                        className={`w-full py-3.5 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 bg-[#10B981] hover:bg-[#059669] text-white shadow-md transition-all ${
+                          isFinalizing ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
+                        }`}
+                      >
+                        {isFinalizing ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Processing...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Check className="w-4 h-4" />
+                            <span>CONFIRM FINAL PAYMENT</span>
+                          </>
+                        )}
+                      </button>
                     </div>
-                  ))}
-                </div>
+                  );
+                })()
+              ) : (
+                /* Advance Order Details (view mode) */
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center pb-3 border-b border-black/10">
+                    <div>
+                      <p className="text-[11px] font-mono font-bold text-[#F500A0]">{selectedAdvance.id}</p>
+                      <h3 className="text-lg font-black text-[#000000] tracking-tight">Advance Order Details</h3>
+                    </div>
+                    <button onClick={closeAdvanceDialog} className="text-black hover:bg-black/5 w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
 
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <div className="bg-[#F4F4F5] border border-black/10 rounded-lg p-2.5">
-                    <p className="text-[9px] font-bold text-[#7C5A52] uppercase tracking-wider">Total</p>
-                    <p className="text-sm font-black text-black">₹{Number(selectedAdvance.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                  <div className="bg-[#F9FAFB] border border-black/10 rounded-lg p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-[#7C5A52]">Customer</p>
+                    <p className="text-sm font-black text-black">{selectedAdvance.customer_name}</p>
+                    <p className="text-[11px] font-bold text-[#7C5A52]">{selectedAdvance.customer_phone}</p>
+                    {selectedAdvance.customer_address && (
+                      <p className="text-[11px] text-[#7C5A52] mt-0.5">{selectedAdvance.customer_address}</p>
+                    )}
                   </div>
-                  <div className="bg-[#DCFCE7] border border-[#16A34A]/30 rounded-lg p-2.5">
-                    <p className="text-[9px] font-bold text-[#166534] uppercase tracking-wider">Paid</p>
-                    <p className="text-sm font-black text-[#166534]">₹{Number(selectedAdvance.deposit_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
-                  </div>
-                  <div className="bg-[#FEE2E2] border border-[#DC2626]/30 rounded-lg p-2.5">
-                    <p className="text-[9px] font-bold text-[#991B1B] uppercase tracking-wider">Balance</p>
-                    <p className="text-sm font-black text-[#991B1B]">₹{balanceRemaining(selectedAdvance).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
-                  </div>
-                </div>
 
-                {selectedAdvance.delivery_date && (
-                  <p className="text-[11px] font-bold text-[#7C5A52]"><Calendar className="w-3 h-3 inline mr-1" />Delivery: {new Date(selectedAdvance.delivery_date).toLocaleDateString()}</p>
-                )}
-                {selectedAdvance.notes && (
-                  <div className="bg-[#FEF9C3] border border-[#EAB308]/30 rounded-lg p-2.5 text-[11px] text-[#78350F]">
-                    <span className="font-bold">Notes: </span>{selectedAdvance.notes}
+                  <div className="border border-black/10 rounded-lg divide-y divide-black/5">
+                    {selectedAdvance.items.map((it) => (
+                      <div key={it.id} className="flex justify-between items-center p-2.5 text-xs">
+                        <div>
+                          <p className="font-bold text-black">{it.snapshot_name}</p>
+                          <p className="text-[10px] text-[#7C5A52]">Qty: {it.quantity} × ₹{Number(it.snapshot_price).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                        </div>
+                        <p className="font-black text-black">₹{(Number(it.snapshot_price) * it.quantity).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                      </div>
+                    ))}
                   </div>
-                )}
 
-                {/* Print / Share the advance receipt (view mode) */}
-                {advanceViewMode === "view" && (
+                  {(() => {
+                    const selTotals = calculateOrderTotals(selectedAdvance);
+                    return (
+                      <>
+                        <div className="grid grid-cols-3 gap-2 text-center">
+                          <div className="bg-[#F4F4F5] border border-black/10 rounded-lg p-2.5">
+                            <p className="text-[9px] font-bold text-[#7C5A52] uppercase tracking-wider">Total</p>
+                            <p className="text-sm font-black text-black">₹{selTotals.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                          </div>
+                          <div className="bg-[#DCFCE7] border border-[#16A34A]/30 rounded-lg p-2.5">
+                            <p className="text-[9px] font-bold text-[#166534] uppercase tracking-wider">Paid</p>
+                            <p className="text-sm font-black text-[#166534]">₹{selTotals.paid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                          </div>
+                          <div className="bg-[#FEE2E2] border border-[#DC2626]/30 rounded-lg p-2.5">
+                            <p className="text-[9px] font-bold text-[#991B1B] uppercase tracking-wider">Balance</p>
+                            <p className="text-sm font-black text-[#991B1B]">₹{selTotals.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                          </div>
+                        </div>
+
+                        {(selTotals.gst > 0 || selTotals.deliveryFee > 0 || selTotals.discount > 0) && (
+                          <div className="bg-[#F9FAFB] border border-black/10 rounded-lg p-2.5 text-[11px] space-y-1">
+                            <div className="flex justify-between text-[#7C5A52]">
+                              <span>Subtotal</span>
+                              <span>₹{selTotals.subtotal.toFixed(2)}</span>
+                            </div>
+                            {selTotals.discount > 0 && (
+                              <div className="flex justify-between text-[#F500A0] font-bold">
+                                <span>{selTotals.discountType === "PERCENT" ? `Discount (${selTotals.discountValue}%)` : "Manual Discount"}</span>
+                                <span>-₹{selTotals.discount.toFixed(2)}</span>
+                              </div>
+                            )}
+                            {selTotals.gst > 0 && (
+                              <div className="flex justify-between text-[#7C5A52]">
+                                <span>GST ({selTotals.gstRate}%)</span>
+                                <span>+₹{selTotals.gst.toFixed(2)}</span>
+                              </div>
+                            )}
+                            {selTotals.deliveryFee > 0 && (
+                              <div className="flex justify-between text-[#7C5A52]">
+                                <span>Delivery</span>
+                                <span>₹{selTotals.deliveryFee.toFixed(2)}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+
+                  {selectedAdvance.delivery_date && (
+                    <p className="text-[11px] font-bold text-[#7C5A52]"><Calendar className="w-3 h-3 inline mr-1" />Delivery: {new Date(selectedAdvance.delivery_date).toLocaleDateString()}</p>
+                  )}
+                  {selectedAdvance.notes && (
+                    <div className="bg-[#FEF9C3] border border-[#EAB308]/30 rounded-lg p-2.5 text-[11px] text-[#78350F]">
+                      <span className="font-bold">Notes: </span>{selectedAdvance.notes}
+                    </div>
+                  )}
+
                   <div className="pt-3 border-t border-black/10 grid grid-cols-2 gap-2">
                     <button
                       onClick={() => printAdvanceReceipt(selectedAdvance.id)}
@@ -4902,78 +5135,15 @@ export default function POSBilling() {
                     >
                       <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.012c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z" />
-                      </svg>
-                      Share Receipt
-                    </button>
-                  </div>
-                )}
-
-                {/* Receive-payment specific fields */}
-                {advanceViewMode === "receive" && selectedAdvance.status !== "COMPLETED" && selectedAdvance.status !== "CANCELLED" && (
-                  <div className="pt-3 border-t border-black/10 space-y-3">
-                    <div>
-                      <label className="block text-[10px] font-bold text-[#000000] uppercase tracking-wider mb-1.5">Manual Discount</label>
-                      <div className="flex gap-2">
-                        <select
-                          value={receiveDiscountType}
-                          onChange={(e) => setReceiveDiscountType(e.target.value as "FIXED" | "PERCENT")}
-                          className="bg-white border border-black/15 rounded-lg px-2 py-2 text-xs font-bold focus:outline-none"
-                        >
-                          <option value="FIXED">₹</option>
-                          <option value="PERCENT">%</option>
-                        </select>
-                        <input
-                          type="number"
-                          value={receiveDiscountValue}
-                          onChange={(e) => setReceiveDiscountValue(e.target.value === "" ? "" : parseFloat(e.target.value))}
-                          onWheel={(e) => e.currentTarget.blur()}
-                          className="flex-1 bg-white border border-black/15 focus:border-[#F500A0] rounded-lg px-3 py-2 text-sm font-bold focus:outline-none"
-                          placeholder="0"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] font-bold text-[#000000] uppercase tracking-wider mb-1.5">Payment Method</label>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {ORDER_PAYMENT_MODES.map((mode) => (
-                          <button
-                            key={mode}
-                            onClick={() => setReceivePaymentMode(mode)}
-                            className={`py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border transition-all cursor-pointer ${
-                              receivePaymentMode === mode ? "bg-[#F500A0] text-white border-[#F500A0]" : "bg-white text-black border-black/10 hover:border-[#F500A0]"
-                            }`}
-                          >
-                            {mode === "GPAY" ? "GPay" : mode}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="bg-[#DCFCE7] border border-[#16A34A]/40 rounded-lg p-3 text-center">
-                      <p className="text-[10px] font-bold text-[#166534] uppercase tracking-wider">Final Amount to Collect</p>
-                      <p className="text-2xl font-black text-[#166534]">₹{receiveBalanceFinalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
-                    </div>
-
-                    <p className="text-[10px] font-bold text-[#78350F] bg-[#FEF3C7] border border-[#F59E0B]/30 rounded-lg p-2.5">
-                      Confirmation marks the order Completed, creates one official invoice, and recognizes the full ₹{Number(selectedAdvance.total_amount - receiveBalanceDiscountAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })} as revenue.
-                    </p>
-
-                    <button
-                      onClick={confirmReceiveBalance}
-                      disabled={isFinalizing}
-                      className={`w-full py-3 rounded-lg font-black text-[11px] uppercase tracking-[0.1em] flex items-center justify-center gap-2 bg-[#10B981] hover:bg-[#059669] text-white shadow-md transition-all ${
-                        isFinalizing ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
-                      }`}
-                    >
-                      {isFinalizing ? (<><Loader2 className="w-4 h-4 animate-spin" /><span>Finalizing...</span></>) : (<><Check className="w-4 h-4" /><span>Confirm Final Payment</span></>)}
-                    </button>
-                  </div>
-                )}
+                    </svg>
+                    Share Receipt
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
           </div>
-        )}
+        </div>
+      )}
 
         {/* ── Advance Orders tab ─────────────────────────────────── */}
         {activeTab === "advance" && (
@@ -5062,10 +5232,11 @@ export default function POSBilling() {
             {/* Summary cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
               {(() => {
-                const pending = advanceOrders.filter((a) => a.status === "PENDING" || a.status === "READY");
-                const outstanding = pending.reduce((acc, a) => acc + balanceRemaining(a), 0);
-                const ready = advanceOrders.filter((a) => a.status === "READY").length;
-                const completed = advanceOrders.filter((a) => a.status === "COMPLETED").length;
+                const periodOrders = advanceOrders.filter((a) => isDateInPeriod(a.created_at, advPeriod, advStartDate, advEndDate));
+                const pending = periodOrders.filter((a) => a.status === "PENDING" || a.status === "READY");
+                const outstanding = pending.reduce((acc, a) => acc + calculateOrderTotals(a).balance, 0);
+                const ready = periodOrders.filter((a) => a.status === "READY").length;
+                const completed = periodOrders.filter((a) => a.status === "COMPLETED").length;
                 return (
                   <>
                     <div className="bg-white border border-black/10 rounded-xl p-4 shadow-xs flex justify-between items-center">
@@ -5191,11 +5362,16 @@ export default function POSBilling() {
                         )}
                       </div>
                       {/* Total / Paid / Balance */}
-                      <div className="text-[11px]">
-                        <p className="font-bold text-black">Total: ₹{Number(a.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
-                        <p className="text-[#16A34A] font-bold">Paid: ₹{Number(a.deposit_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
-                        <p className="text-[#DC2626] font-bold">Balance: ₹{bal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
-                      </div>
+                      {(() => {
+                        const rowTotals = calculateOrderTotals(a);
+                        return (
+                          <div className="text-[11px]">
+                            <p className="font-bold text-black">Total: ₹{rowTotals.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                            <p className="text-[#16A34A] font-bold">Paid: ₹{rowTotals.paid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                            <p className="text-[#DC2626] font-bold">Balance: ₹{rowTotals.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                          </div>
+                        );
+                      })()}
                       {/* Delivery */}
                       <div className="text-[11px] font-bold text-[#7C5A52]">
                         {a.delivery_date ? new Date(a.delivery_date).toLocaleDateString() : "—"}
@@ -5206,6 +5382,13 @@ export default function POSBilling() {
                           value={a.status}
                           onChange={async (e) => {
                             const next = e.target.value as AdvanceOrderStatus;
+                            if (next === "COMPLETED") {
+                              const totals = calculateOrderTotals(a);
+                              if (totals.balance > 0) {
+                                openReceiveBalance(a);
+                                return;
+                              }
+                            }
                             if (next === "CANCELLED") {
                               if (!confirm(`Cancel advance order ${a.id}? The deposit is treated as forfeit/refunded outside the system.`)) return;
                             }
@@ -5215,11 +5398,24 @@ export default function POSBilling() {
                                 prev.map((item) => {
                                   if (item.id === a.id) {
                                     if (next === "COMPLETED") {
+                                      const totals = calculateOrderTotals(item);
                                       return {
                                         ...item,
                                         status: "COMPLETED",
-                                        deposit_amount: item.total_amount,
+                                        deposit_amount: totals.total,
+                                        amount_paid: totals.total,
                                         remaining_balance: 0,
+                                        balance_due: 0,
+                                      };
+                                    } else if (item.status === "COMPLETED" && (next === "PENDING" || next === "READY")) {
+                                      const origDep = (item as any).initial_deposit ?? (item as any).original_deposit ?? item.deposit_amount;
+                                      return {
+                                        ...item,
+                                        status: next,
+                                        deposit_amount: origDep,
+                                        amount_paid: origDep,
+                                        remaining_balance: Math.max(0, Number(item.total_amount) - Number(origDep)),
+                                        balance_due: Math.max(0, Number(item.total_amount) - Number(origDep)),
                                       };
                                     }
                                     return { ...item, status: next };
@@ -5249,14 +5445,17 @@ export default function POSBilling() {
                       </div>
                       {/* Actions — Cancel (X) removed */}
                       <div className="flex items-center justify-end gap-1.5 flex-nowrap">
-                        <button onClick={() => shareAdvanceReceiptWhatsApp({
-                          id: a.id,
-                          customerName: a.customer_name,
-                          customerPhone: a.customer_phone,
-                          total: Number(a.total_amount),
-                          deposit: Number(a.deposit_amount),
-                          balance: bal
-                        })} title="Send on WhatsApp" className="flex items-center justify-center w-8 h-8 bg-[#10B981]/10 hover:bg-[#10B981]/20 text-[#10B981] rounded-md transition-colors cursor-pointer shrink-0">
+                        <button onClick={() => {
+                          const rowTotals = calculateOrderTotals(a);
+                          shareAdvanceReceiptWhatsApp({
+                            id: a.id,
+                            customerName: a.customer_name,
+                            customerPhone: a.customer_phone,
+                            total: rowTotals.total,
+                            deposit: rowTotals.paid,
+                            balance: rowTotals.balance
+                          });
+                        }} title="Send on WhatsApp" className="flex items-center justify-center w-8 h-8 bg-[#10B981]/10 hover:bg-[#10B981]/20 text-[#10B981] rounded-md transition-colors cursor-pointer shrink-0">
                           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.012c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413Z" />
                           </svg>
@@ -5265,12 +5464,13 @@ export default function POSBilling() {
                           if (a.status === "COMPLETED" && a.finalized_order_id) {
                             const clean = a.finalized_order_id.replace(/^#/, "");
                             const found = orders.find(o => o.id === a.finalized_order_id || o.id === clean || (o.id && o.id.includes(clean)));
-                            setActiveInvoiceData(found || null);
+                            setActiveInvoiceData(found ? normalizeOrder(found) : normalizeOrder(a));
                             setActiveInvoiceId(a.finalized_order_id);
                           } else {
-                            printAdvanceReceipt(a.id);
+                            setActiveInvoiceData(normalizeOrder(a));
+                            setActiveInvoiceId(a.id);
                           }
-                        }} title={a.status === "COMPLETED" ? "Open Final Invoice" : "Print Advance Receipt"} className="flex items-center justify-center w-8 h-8 bg-[#F500A0]/10 hover:bg-[#F500A0]/20 text-[#F500A0] rounded-md transition-colors cursor-pointer shrink-0">
+                        }} title="View Invoice" className="flex items-center justify-center w-8 h-8 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-md transition-colors cursor-pointer shrink-0">
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                           </svg>

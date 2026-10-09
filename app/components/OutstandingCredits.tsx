@@ -30,6 +30,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { isUuid } from "@/lib/ids";
 import { toast } from "@/lib/toast";
 import { completeOrder } from "@/lib/completeOrder";
+import { calculateOrderTotals } from "@/lib/orderTotals";
 
 export interface OutstandingCreditsProps {
   orders: OrderWithRelations[];
@@ -199,33 +200,33 @@ export default function OutstandingCredits({
     return allHistory.filter((o) => matchesSearch(o, search)).filter(matchesDate);
   }, [allHistory, search, fromDate, toDate]);
 
-  // Metric KPI Cards Calculation
+  // Metric KPI Cards Calculation (respects active date/period filters)
   const totalReceived = useMemo(() => {
-    return allHistory.reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
-  }, [allHistory]);
+    return filteredHistory.reduce((sum, o) => sum + calculateOrderTotals(o).paid, 0);
+  }, [filteredHistory]);
 
   const totalOutstanding = useMemo(() => {
-    return allOutstanding.reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
-  }, [allOutstanding]);
+    return filteredOutstanding.reduce((sum, o) => sum + calculateOrderTotals(o).balance, 0);
+  }, [filteredOutstanding]);
 
   const totalCreditBilled = totalReceived + totalOutstanding;
-  const totalBillsCount = allHistory.length + allOutstanding.length;
+  const totalBillsCount = filteredHistory.length + filteredOutstanding.length;
 
   const overdueList = useMemo(() => {
-    return allOutstanding.filter((o) => toDaysOverdue(o.credit_due_date) > 0);
-  }, [allOutstanding]);
+    return filteredOutstanding.filter((o) => toDaysOverdue(o.credit_due_date) > 0);
+  }, [filteredOutstanding]);
 
   const totalOverdue = useMemo(() => {
-    return overdueList.reduce((sum, o) => sum + Number(o.grand_total || 0), 0);
+    return overdueList.reduce((sum, o) => sum + calculateOrderTotals(o).balance, 0);
   }, [overdueList]);
 
   // Mark as Paid
   const handleMarkAsPaid = async (order: any) => {
     const norm = normalizeOrder(order);
     if (!norm) return;
+    const totals = calculateOrderTotals(norm);
     const invoiceDisplay = norm.invoiceNo || norm.invoice_no || norm.id || order.id;
-    const orderTotal = norm.total;
-    const confirmMsg = `Mark ${formatCurrency(orderTotal)} from "${norm.customer_name}" (#${invoiceDisplay}) as fully paid & settled?`;
+    const confirmMsg = `Mark ${formatCurrency(totals.balance || totals.total)} from "${norm.customer_name}" (#${invoiceDisplay}) as fully paid & settled?`;
     if (!window.confirm(confirmMsg)) return;
 
     const rowKey = order.id || norm.id;
@@ -586,10 +587,10 @@ export default function OutstandingCredits({
                         <div>
                           <p className="font-black text-gray-900 text-sm">{order.customer_name}</p>
                           <p className="text-xs font-mono font-bold text-[#F500A0] mt-0.5">
-                            #{order.id} • {order.customer_phone || "No phone"}
+                            {order.invoice_number || order.invoice_no || order.invoiceNo || order.order_id || `#INV-${String(order.id).slice(0, 8).toUpperCase()}`} • {order.customer_phone || "No phone"}
                           </p>
                         </div>
-                        <p className="font-black text-gray-900 text-base">{formatCurrency(order.grand_total)}</p>
+                        <p className="font-black text-rose-600 text-base">{formatCurrency(calculateOrderTotals(order).balance)}</p>
                       </div>
 
                       <div className="flex items-center flex-wrap gap-2 text-xs">
@@ -701,7 +702,7 @@ export default function OutstandingCredits({
                       return (
                         <tr key={order.id} className="hover:bg-pink-50/20 transition-colors">
                           <td className="p-3.5 font-mono font-bold text-gray-800">
-                            #{order.id}
+                            {order.invoice_number || order.invoice_no || order.invoiceNo || order.order_id || `#INV-${String(order.id).slice(0, 8).toUpperCase()}`}
                           </td>
                           <td className="p-3.5">
                             <div className="font-black text-gray-900 text-xs">{order.customer_name}</div>
@@ -736,8 +737,8 @@ export default function OutstandingCredits({
                               )}
                             </div>
                           </td>
-                          <td className="p-3.5 text-right font-black text-gray-900 text-sm">
-                            {formatCurrency(order.grand_total)}
+                          <td className="p-3.5 text-right font-black text-rose-600 text-sm">
+                            {formatCurrency(calculateOrderTotals(order).balance)}
                           </td>
                           <td className="p-3.5">
                             <div className="flex items-center justify-center gap-1.5">
@@ -834,10 +835,10 @@ export default function OutstandingCredits({
                       <div>
                         <p className="font-black text-gray-900 text-sm">{order.customer_name}</p>
                         <p className="text-xs font-mono font-bold text-gray-500 mt-0.5">
-                          #{order.id} • {order.customer_phone || "No phone"}
+                          {order.invoice_number || order.invoice_no || order.invoiceNo || order.order_id || `#INV-${String(order.id).slice(0, 8).toUpperCase()}`} • {order.customer_phone || "No phone"}
                         </p>
                       </div>
-                      <p className="font-black text-gray-900 text-base">{formatCurrency(order.grand_total)}</p>
+                      <p className="font-black text-gray-900 text-base">{formatCurrency(calculateOrderTotals(order).total)}</p>
                     </div>
 
                     <div className="flex items-center flex-wrap gap-2 text-xs">
@@ -910,7 +911,7 @@ export default function OutstandingCredits({
                     {filteredHistory.map((order) => (
                       <tr key={order.id} className="hover:bg-gray-50/50 transition-colors">
                         <td className="p-3.5 font-mono font-bold text-gray-800">
-                          #{order.id}
+                          {order.invoice_number || order.invoice_no || order.invoiceNo || order.order_id || `#INV-${String(order.id).slice(0, 8).toUpperCase()}`}
                         </td>
                         <td className="p-3.5">
                           <div className="font-black text-gray-900 text-xs">{order.customer_name}</div>
@@ -925,7 +926,7 @@ export default function OutstandingCredits({
                           </span>
                         </td>
                         <td className="p-3.5 text-right font-black text-gray-900 text-sm">
-                          {formatCurrency(order.grand_total)}
+                          {formatCurrency(calculateOrderTotals(order).total)}
                         </td>
                         <td className="p-3.5">
                           <div className="flex items-center justify-center gap-1.5">

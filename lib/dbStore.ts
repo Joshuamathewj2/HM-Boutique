@@ -1,6 +1,7 @@
 import { sql } from './db';
 import { BROCHURE_CATALOGUE_ITEMS, OFFICIAL_COURSE_CATEGORIES, catalogItemToProduct } from './courses';
 import { isSupabaseConfigured, supabase } from './supabase';
+import { calculateOrderTotals } from './orderTotals';
 import {
   Product,
   Category,
@@ -35,6 +36,14 @@ const keyFilter = (id: string, col: string = 'invoice_no'): string => {
   }
   const cleanId = id.trim();
   return isUuid(cleanId) ? `id.eq.${cleanId},${col}.eq.${cleanId}` : `${col}.eq.${cleanId}`;
+};
+
+const mapStatus = (rawStatus: any): AdvanceOrderStatus => {
+  const s = String(rawStatus || '').toLowerCase();
+  if (s === 'completed' || s === 'paid') return 'COMPLETED';
+  if (s === 'cancelled' || s === 'canceled' || s === 'void') return 'CANCELLED';
+  if (s === 'ready' || s === 'ready_for_delivery') return 'READY';
+  return 'PENDING';
 };
 
 export const dbStore = {
@@ -719,7 +728,26 @@ export const dbStore = {
 
             const discount = Number(o.discount_amount || 0) + Number(o.manual_discount_amount || 0);
             const total = Number(o.total || o.grand_total || 0);
-            const subtotal = Number(o.subtotal || total);
+            const rawSubtotal = Number(o.subtotal || (mappedItems.reduce((sum, it) => sum + (it.snapshot_price * it.quantity), 0)) || total);
+            const isGst = Boolean(
+              Number(o.total_gst || o.gst_amount || 0) > 0 ||
+              o.is_gst ||
+              o.gst_enabled ||
+              (total > 0 && rawSubtotal > 0 && total > rawSubtotal)
+            );
+            const gstAmount = Number(
+              o.total_gst ||
+              o.gst_amount ||
+              (isGst && total > rawSubtotal ? total - rawSubtotal : 0)
+            );
+            const subtotal = rawSubtotal > 0 && (rawSubtotal !== total || gstAmount === 0)
+              ? rawSubtotal
+              : (gstAmount > 0 ? total - gstAmount : total);
+            const gstPercentage = Number(
+              o.gst_percentage ||
+              o.gst_rate ||
+              (gstAmount > 0 && subtotal > 0 ? Math.round((gstAmount / subtotal) * 100) : (isGst ? 18 : 0))
+            );
 
             return {
               id: String(o.id),
@@ -731,15 +759,16 @@ export const dbStore = {
               customer_address: o.address || null,
               source: (o.order_mode || 'offline').toUpperCase() as 'ONLINE' | 'OFFLINE',
               status: (o.status || 'COMPLETED').toUpperCase() as 'COMPLETED' | 'PENDING',
-              is_gst: Boolean(Number(o.total_gst || o.gst_amount || 0) > 0),
+              is_gst: isGst,
               subtotal,
               discount_type: 'FIXED',
               discount_value: discount,
               discount_amount: discount,
-              gst_percentage: Number(o.gst_percentage || 0),
-              gst_amount: Number(o.total_gst || o.gst_amount || 0),
+              gst_percentage: gstPercentage,
+              gst_amount: gstAmount,
               delivery_fee: Number(o.delivery_charge || o.delivery_fee || 0),
               grand_total: total,
+              total,
               cash_received: Number(o.cash_received || total),
               split_cash: Number(o.split_cash || 0),
               split_gpay: Number(o.split_gpay || 0),
@@ -877,6 +906,33 @@ export const dbStore = {
           } catch {}
         }
 
+        // 8. Check 'advance_orders' table fallback
+        if (!row) {
+          try {
+            const { data } = await supabase
+              .from('advance_orders')
+              .select('*')
+              .or(isUuid ? `id.eq.${cleanId},deposit_id.eq.${cleanId}` : `deposit_id.eq.${cleanId}`)
+              .maybeSingle();
+            if (data) {
+              row = {
+                ...data,
+                invoice_no: data.deposit_id || data.id,
+                is_advance: true,
+                order_type: 'ADVANCE',
+                subtotal: Number(data.subtotal || data.total_amount || 0),
+                total: Number(data.total_amount || 0),
+                grand_total: Number(data.total_amount || 0),
+                deposit_amount: Number(data.deposit_amount || 0),
+                amount_paid: Number(data.deposit_amount || 0),
+                cash_received: Number(data.deposit_amount || 0),
+                balance_due: Math.max(0, Number(data.total_amount || 0) - Number(data.deposit_amount || 0)),
+                created_at: data.created_at || new Date().toISOString(),
+              };
+            }
+          } catch {}
+        }
+
         if (row) {
           let items: any[] = [];
           if (Array.isArray(row.items)) {
@@ -885,7 +941,7 @@ export const dbStore = {
             try { items = JSON.parse(row.items); } catch { items = []; }
           }
 
-          // If items are still empty, try querying order_items table
+          // If items are still empty, try querying order_items or advance_order_items table
           if (items.length === 0 && row.id) {
             try {
               const { data: fetchedItems } = await supabase
@@ -894,6 +950,14 @@ export const dbStore = {
                 .eq('order_id', row.id);
               if (fetchedItems && fetchedItems.length > 0) {
                 items = fetchedItems;
+              } else {
+                const { data: advItems } = await supabase
+                  .from('advance_order_items')
+                  .select('*')
+                  .or(`advance_order_id.eq.${row.id},advance_order_id.eq.${cleanId}`);
+                if (advItems && advItems.length > 0) {
+                  items = advItems;
+                }
               }
             } catch {}
           }
@@ -909,7 +973,26 @@ export const dbStore = {
 
           const discount = Number(row.discount_amount || row.discount || 0) + Number(row.manual_discount_amount || 0);
           const total = Number(row.total || row.grand_total || row.total_amount || 0);
-          const subtotal = Number(row.subtotal || total);
+          const rawSubtotal = Number(row.subtotal || (mappedItems.reduce((sum, it) => sum + (it.snapshot_price * it.quantity), 0)) || total);
+          const isGst = Boolean(
+            Number(row.total_gst || row.gst_amount || 0) > 0 ||
+            row.is_gst ||
+            row.gst_enabled ||
+            (total > 0 && rawSubtotal > 0 && total > rawSubtotal)
+          );
+          const gstAmount = Number(
+            row.total_gst ||
+            row.gst_amount ||
+            (isGst && total > rawSubtotal ? total - rawSubtotal : 0)
+          );
+          const subtotal = rawSubtotal > 0 && (rawSubtotal !== total || gstAmount === 0)
+            ? rawSubtotal
+            : (gstAmount > 0 ? total - gstAmount : total);
+          const gstPercentage = Number(
+            row.gst_percentage ||
+            row.gst_rate ||
+            (gstAmount > 0 && subtotal > 0 ? Math.round((gstAmount / subtotal) * 100) : (isGst ? 18 : 0))
+          );
 
           return {
             id: row.invoice_no || row.invoice_number || row.order_number || String(row.id),
@@ -919,15 +1002,16 @@ export const dbStore = {
             customer_address: row.address || row.customer_address || row.customerAddress || null,
             source: (row.order_mode || row.source || 'offline').toUpperCase() as 'ONLINE' | 'OFFLINE',
             status: (row.status || 'COMPLETED').toUpperCase() as 'COMPLETED' | 'PENDING',
-            is_gst: Boolean(Number(row.total_gst || row.gst_amount || 0) > 0 || row.is_gst),
+            is_gst: isGst,
             subtotal,
             discount_type: 'FIXED',
             discount_value: discount,
             discount_amount: discount,
-            gst_percentage: Number(row.gst_percentage || row.gst_rate || 0),
-            gst_amount: Number(row.total_gst || row.gst_amount || 0),
+            gst_percentage: gstPercentage,
+            gst_amount: gstAmount,
             delivery_fee: Number(row.delivery_charge || row.delivery_fee || 0),
             grand_total: total,
+            total,
             cash_received: Number(row.cash_received || row.received_amount || total),
             split_cash: Number(row.split_cash || row.split_details?.cash || 0),
             split_gpay: Number(row.split_gpay || row.split_details?.gpay || 0),
@@ -1058,8 +1142,10 @@ export const dbStore = {
     creditDueDate?: string | null;
   }): Promise<{ orderId: string; id?: string; invoiceNo?: string }> {
     const formattedInvoiceNo = payload.orderId.startsWith('INV') ? payload.orderId : `INV-${payload.orderId}`;
-    const subtotalInclusive = payload.grandTotal + payload.discountAmount - payload.deliveryFee;
     const isCredit = payload.paymentMode === 'CREDIT';
+    const isGst = Boolean(payload.isGst || (payload.gstAmount && payload.gstAmount > 0));
+    const itemsSubtotal = payload.items.reduce((sum, it) => sum + (it.price * it.qty), 0);
+    const baseSubtotal = itemsSubtotal > 0 ? itemsSubtotal : (payload.grandTotal - (isGst ? payload.gstAmount : 0) - payload.deliveryFee + payload.discountAmount);
 
     const structuredItems = payload.items.map((it) => ({
       product_id: it.product_id || null,
@@ -1093,12 +1179,15 @@ export const dbStore = {
           order_mode: (payload.source || 'OFFLINE').toLowerCase(),
           order_type: 'pos_sale',
           status: isCredit ? 'PENDING' : 'COMPLETED',
-          subtotal: subtotalInclusive,
+          subtotal: baseSubtotal,
           total: payload.grandTotal,
           discount_amount: payload.discountAmount,
           manual_discount_amount: 0,
-          total_gst: payload.isGst ? payload.gstAmount : 0,
-          gst_amount: payload.isGst ? payload.gstAmount : 0,
+          manual_discount_type: payload.discountType === 'PERCENT' ? 'percent' : 'flat',
+          manual_discount_value: payload.discountValue || 0,
+          gst_enabled: isGst,
+          total_gst: isGst ? payload.gstAmount : 0,
+          gst_amount: isGst ? payload.gstAmount : 0,
           delivery_charge: payload.deliveryFee,
           payment_mode: payload.paymentMode,
           payment_method: isCredit ? 'CREDIT' : payload.paymentMode,
@@ -1216,7 +1305,7 @@ export const dbStore = {
           is_credit, credit_status, credit_due_date
         ) VALUES (
           ${payload.orderId}, ${customer.id}, ${payload.source}, ${isCredit ? 'PENDING' : 'COMPLETED'}, ${payload.isGst},
-          ${subtotalInclusive},
+          ${baseSubtotal},
           ${payload.discountType}, ${payload.discountValue}, ${payload.discountAmount},
           ${payload.gstPercentage}, ${payload.gstAmount}, ${payload.deliveryFee},
           ${payload.grandTotal}, ${payload.cashReceived},
@@ -1496,19 +1585,34 @@ export const dbStore = {
 
   // â”€â”€ ADVANCE ORDERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async listAdvanceOrders(): Promise<AdvanceOrderWithRelations[]> {
-    const mapStatus = (rawStatus: any): AdvanceOrderStatus => {
-      const s = String(rawStatus || '').toLowerCase();
-      if (s === 'completed') return 'COMPLETED';
-      if (s === 'cancelled' || s === 'canceled') return 'CANCELLED';
-      if (s === 'ready' || s === 'ready_for_delivery') return 'READY';
-      return 'PENDING';
-    };
+
 
     if (isSupabaseConfigured) {
       const results: AdvanceOrderWithRelations[] = [];
       const seenIds = new Set<string>();
 
-      // 1. Read from dedicated advance_orders table
+      // 1. Fetch matching orders to enrich advance_orders breakdown
+      const ordMap = new Map<string, any>();
+      let ordDataList: any[] = [];
+      try {
+        const { data: ordData } = await supabase
+          .from('orders')
+          .select('*')
+          .or('order_type.eq.ADVANCE,order_type.eq.advance,invoice_no.ilike.DEP-%')
+          .order('created_at', { ascending: false });
+        if (ordData && ordData.length > 0) {
+          ordDataList = ordData;
+          for (const o of ordData) {
+            if (o.invoice_no) ordMap.set(o.invoice_no, o);
+            if (o.id) ordMap.set(String(o.id), o);
+            if (o.reference_number) ordMap.set(o.reference_number, o);
+          }
+        }
+      } catch (err) {
+        console.warn('Supabase orders fetch error in listAdvanceOrders:', err);
+      }
+
+      // 2. Read from dedicated advance_orders table
       try {
         const { data, error } = await supabase
           .from('advance_orders')
@@ -1522,11 +1626,15 @@ export const dbStore = {
             seenIds.add(advId);
             if (a.deposit_id) seenIds.add(String(a.id));
 
+            const matchedOrd = ordMap.get(advId) || ordMap.get(String(a.id)) || (a.deposit_id ? ordMap.get(a.deposit_id) : null);
+
             let parsedItems: any[] = [];
             if (Array.isArray(a.products) && a.products.length > 0) {
               parsedItems = a.products;
             } else if (typeof a.products === 'string' && a.products.trim()) {
               try { parsedItems = JSON.parse(a.products); } catch {}
+            } else if (matchedOrd && Array.isArray(matchedOrd.items) && matchedOrd.items.length > 0) {
+              parsedItems = matchedOrd.items;
             }
 
             const items: AdvanceOrderItemRow[] = parsedItems.length > 0
@@ -1551,23 +1659,62 @@ export const dbStore = {
                   },
                 ];
 
+            const totalAmt = Number(matchedOrd?.total || matchedOrd?.grand_total || a.total_amount || 0);
+            const depAmt = Number(matchedOrd?.amount_paid || matchedOrd?.cash_received || a.deposit_amount || 0);
+            const rawSubtotal = Number(matchedOrd?.subtotal || (items.reduce((sum, it) => sum + (it.snapshot_price * it.quantity), 0)) || totalAmt);
+            const isGst = Boolean(
+              matchedOrd?.gst_enabled ||
+              matchedOrd?.is_gst ||
+              Number(matchedOrd?.total_gst || matchedOrd?.gst_amount || 0) > 0 ||
+              (totalAmt > 0 && rawSubtotal > 0 && totalAmt > rawSubtotal)
+            );
+            const gstAmount = Number(
+              matchedOrd?.total_gst ||
+              matchedOrd?.gst_amount ||
+              (isGst && totalAmt > rawSubtotal ? totalAmt - rawSubtotal : 0)
+            );
+            const subtotal = rawSubtotal > 0 && (rawSubtotal !== totalAmt || gstAmount === 0)
+              ? rawSubtotal
+              : (gstAmount > 0 ? totalAmt - gstAmount : totalAmt);
+            const gstPercentage = Number(
+              matchedOrd?.gst_percentage ||
+              matchedOrd?.gst_rate ||
+              (gstAmount > 0 && subtotal > 0 ? Math.round((gstAmount / subtotal) * 100) : (isGst ? 18 : 0))
+            );
+            const discountAmount = Number(matchedOrd?.discount_amount || 0) + Number(matchedOrd?.manual_discount_amount || 0);
+            const discountValue = Number(matchedOrd?.manual_discount_value || matchedOrd?.discount_value || 0);
+            const discountType = matchedOrd?.manual_discount_type === 'percent' ? 'PERCENT' : 'FIXED';
+            const deliveryFee = Number(matchedOrd?.delivery_charge || matchedOrd?.delivery_fee || 0);
+            const balDue = Number(matchedOrd?.balance_due ?? Math.max(0, totalAmt - depAmt));
+
             results.push({
               id: advId,
               customer_id: String(a.id),
-              customer_name: a.customer_name || 'Customer',
-              customer_phone: a.phone || a.customer_phone || '',
-              customer_address: a.address || a.customer_address || null,
-              status: mapStatus(a.status),
-              subtotal: Number(a.total_amount || a.subtotal || 0),
-              total_amount: Number(a.total_amount || 0),
-              deposit_amount: Number(a.deposit_amount || 0),
-              deposit_payment_mode: 'CASH' as PaymentMode,
-              delivery_date: a.expected_delivery_date || a.delivery_date || null,
-              notes: a.remarks || a.notes || a.description || null,
-              finalized_order_id: null,
-              finalized_at: a.completed_at || null,
+              customer_name: a.customer_name || matchedOrd?.customer_name || 'Customer',
+              customer_phone: a.phone || a.customer_phone || matchedOrd?.phone || '',
+              customer_address: a.address || a.customer_address || matchedOrd?.address || null,
+              status: (a.status === 'completed' || matchedOrd?.status === 'COMPLETED') ? 'COMPLETED' : mapStatus(a.status),
+              subtotal,
+              total_amount: totalAmt,
+              total: totalAmt,
+              grand_total: totalAmt,
+              deposit_amount: depAmt,
+              deposit_payment_mode: (String(matchedOrd?.payment_mode || 'CASH').toUpperCase()) as PaymentMode,
+              delivery_date: a.expected_delivery_date || a.delivery_date || matchedOrd?.delivery_date || null,
+              notes: a.remarks || a.notes || a.description || matchedOrd?.notes || null,
+              finalized_order_id: matchedOrd?.reference_number || a.invoice_number || a.completed_order_id || null,
+              finalized_at: a.completed_at || matchedOrd?.created_at || null,
               cancelled_at: null,
               created_at: a.created_at || new Date().toISOString(),
+              is_gst: isGst,
+              gst_percentage: gstPercentage,
+              gst_amount: gstAmount,
+              discount_amount: discountAmount,
+              discount_type: discountType,
+              discount_value: discountValue,
+              delivery_fee: deliveryFee,
+              amount_paid: depAmt,
+              balance_due: balDue,
               items,
             });
           }
@@ -1576,70 +1723,93 @@ export const dbStore = {
         console.warn('Supabase advance_orders query failed:', err);
       }
 
-      // 2. Also query orders table for advance orders saved there (runs unconditionally)
-      try {
-        const { data: ordData, error: ordErr } = await supabase
-          .from('orders')
-          .select('*')
-          .or('order_type.eq.ADVANCE,order_type.eq.advance,invoice_no.ilike.DEP-%')
-          .order('created_at', { ascending: false });
+      // 3. Add any orders from orders table not yet seen
+      for (const o of ordDataList) {
+        const advId = o.invoice_no || String(o.id);
+        if (seenIds.has(advId) || seenIds.has(String(o.id))) continue;
+        seenIds.add(advId);
 
-        if (!ordErr && ordData && ordData.length > 0) {
-          for (const o of ordData) {
-            const advId = o.invoice_no || String(o.id);
-            if (seenIds.has(advId) || seenIds.has(String(o.id))) continue;
-            seenIds.add(advId);
-
-            let orderItems: any[] = [];
-            if (Array.isArray(o.items)) orderItems = o.items;
-            else if (typeof o.items === 'string') {
-              try { orderItems = JSON.parse(o.items); } catch {}
-            }
-
-            const items: AdvanceOrderItemRow[] = orderItems.map((it: any, idx: number) => ({
-              id: String(it.id || `${o.id}-item-${idx}`),
-              advance_order_id: advId,
-              product_id: it.product_id ? String(it.product_id) : null,
-              snapshot_name: it.name || it.product_name || 'Tailoring Item',
-              snapshot_desc: it.desc || null,
-              snapshot_price: Number(it.price || it.base_price || 0),
-              quantity: Number(it.quantity || it.qty || 1),
-            }));
-
-            const totalAmt = Number(o.total || o.grand_total || o.total_amount || 0);
-            const depAmt = Number(o.amount_paid || o.cash_received || o.deposit_amount || 0);
-
-            results.push({
-              id: advId,
-              customer_id: String(o.user_id || o.id),
-              customer_name: o.customer_name || 'Customer',
-              customer_phone: o.phone || o.customer_phone || '',
-              customer_address: o.address || null,
-              status: mapStatus(o.status),
-              subtotal: Number(o.subtotal || totalAmt),
-              total_amount: totalAmt,
-              deposit_amount: depAmt,
-              deposit_payment_mode: (String(o.payment_mode || 'CASH').toUpperCase()) as PaymentMode,
-              delivery_date: o.delivery_date || o.expected_delivery_date || null,
-              notes: o.notes || o.remarks || null,
-              finalized_order_id: null,
-              finalized_at: null,
-              cancelled_at: null,
-              created_at: o.created_at || new Date().toISOString(),
-              items: items.length > 0 ? items : [{
-                id: `${o.id}-item`,
-                advance_order_id: advId,
-                product_id: null,
-                snapshot_name: 'Tailoring Item',
-                snapshot_desc: null,
-                snapshot_price: totalAmt,
-                quantity: 1,
-              }],
-            });
-          }
+        let orderItems: any[] = [];
+        if (Array.isArray(o.items)) orderItems = o.items;
+        else if (typeof o.items === 'string') {
+          try { orderItems = JSON.parse(o.items); } catch {}
         }
-      } catch {
-        // non-fatal: orders table may not have advance columns yet
+
+        const items: AdvanceOrderItemRow[] = orderItems.map((it: any, idx: number) => ({
+          id: String(it.id || `${o.id}-item-${idx}`),
+          advance_order_id: advId,
+          product_id: it.product_id ? String(it.product_id) : null,
+          snapshot_name: it.name || it.product_name || 'Tailoring Item',
+          snapshot_desc: it.desc || null,
+          snapshot_price: Number(it.price || it.base_price || 0),
+          quantity: Number(it.quantity || it.qty || 1),
+        }));
+
+        const totalAmt = Number(o.total || o.grand_total || o.total_amount || 0);
+        const depAmt = Number(o.amount_paid || o.cash_received || o.deposit_amount || 0);
+        const rawSubtotal = Number(o.subtotal || (items.reduce((sum, it) => sum + (it.snapshot_price * it.quantity), 0)) || totalAmt);
+        const isGst = Boolean(
+          o.gst_enabled ||
+          o.is_gst ||
+          Number(o.total_gst || o.gst_amount || 0) > 0 ||
+          (totalAmt > 0 && rawSubtotal > 0 && totalAmt > rawSubtotal)
+        );
+        const gstAmount = Number(
+          o.total_gst ||
+          o.gst_amount ||
+          (isGst && totalAmt > rawSubtotal ? totalAmt - rawSubtotal : 0)
+        );
+        const subtotal = rawSubtotal > 0 && (rawSubtotal !== totalAmt || gstAmount === 0)
+          ? rawSubtotal
+          : (gstAmount > 0 ? totalAmt - gstAmount : totalAmt);
+        const gstPercentage = Number(
+          o.gst_percentage ||
+          o.gst_rate ||
+          (gstAmount > 0 && subtotal > 0 ? Math.round((gstAmount / subtotal) * 100) : (isGst ? 18 : 0))
+        );
+        const discountAmount = Number(o.discount_amount || 0) + Number(o.manual_discount_amount || 0);
+        const discountValue = Number(o.manual_discount_value || o.discount_value || 0);
+        const discountType = o.manual_discount_type === 'percent' ? 'PERCENT' : 'FIXED';
+        const deliveryFee = Number(o.delivery_charge || o.delivery_fee || 0);
+
+        results.push({
+          id: advId,
+          customer_id: String(o.user_id || o.id),
+          customer_name: o.customer_name || 'Customer',
+          customer_phone: o.phone || o.customer_phone || '',
+          customer_address: o.address || null,
+          status: mapStatus(o.status),
+          subtotal,
+          total_amount: totalAmt,
+          total: totalAmt,
+          grand_total: totalAmt,
+          deposit_amount: depAmt,
+          deposit_payment_mode: (String(o.payment_mode || 'CASH').toUpperCase()) as PaymentMode,
+          delivery_date: o.delivery_date || o.expected_delivery_date || null,
+          notes: o.notes || o.remarks || null,
+          finalized_order_id: null,
+          finalized_at: null,
+          cancelled_at: null,
+          created_at: o.created_at || new Date().toISOString(),
+          is_gst: isGst,
+          gst_percentage: gstPercentage,
+          gst_amount: gstAmount,
+          discount_amount: discountAmount,
+          discount_type: discountType,
+          discount_value: discountValue,
+          delivery_fee: deliveryFee,
+          amount_paid: depAmt,
+          balance_due: Number(o.balance_due ?? Math.max(0, totalAmt - depAmt)),
+          items: items.length > 0 ? items : [{
+            id: `${o.id}-item`,
+            advance_order_id: advId,
+            product_id: null,
+            snapshot_name: 'Tailoring Item',
+            snapshot_desc: null,
+            snapshot_price: totalAmt,
+            quantity: 1,
+          }],
+        });
       }
 
       return results;
@@ -1673,8 +1843,100 @@ export const dbStore = {
     const cleanId = rawId.replace(/^#/, '').trim();
     const list = await this.listAdvanceOrders();
     const found = list.find(
-      (a) => a.id === cleanId || a.id === rawId || a.id.replace(/^#/, '') === cleanId
+      (a) =>
+        a.id === cleanId ||
+        a.id === rawId ||
+        a.id.replace(/^#/, '') === cleanId ||
+        (a as any).deposit_id === cleanId ||
+        (a as any).customer_id === cleanId
     );
+    if (!found && isSupabaseConfigured) {
+      try {
+        const { data: ord } = await supabase
+          .from('orders')
+          .select('*')
+          .or(isUuid(cleanId) ? `id.eq.${cleanId},invoice_no.eq.${cleanId}` : `invoice_no.eq.${cleanId}`)
+          .maybeSingle();
+        if (ord) {
+          const totalAmt = Number(ord.total || ord.grand_total || ord.total_amount || 0);
+          const depAmt = Number(ord.amount_paid || ord.cash_received || ord.deposit_amount || 0);
+          let orderItems: any[] = [];
+          if (Array.isArray(ord.items)) orderItems = ord.items;
+          else if (typeof ord.items === 'string') {
+            try { orderItems = JSON.parse(ord.items); } catch {}
+          }
+          const mappedAdvItems: AdvanceOrderItemRow[] = orderItems.map((it: any, idx: number) => ({
+            id: String(it.id || `${ord.id}-item-${idx}`),
+            advance_order_id: ord.invoice_no || String(ord.id),
+            product_id: it.product_id ? String(it.product_id) : null,
+            snapshot_name: it.name || it.product_name || 'Tailoring Item',
+            snapshot_desc: it.desc || null,
+            snapshot_price: Number(it.price || it.base_price || 0),
+            quantity: Number(it.quantity || it.qty || 1),
+          }));
+
+          const rawSubtotal = Number(ord.subtotal || (mappedAdvItems.reduce((sum: number, it: any) => sum + (it.snapshot_price * it.quantity), 0)) || totalAmt);
+          const isGst = Boolean(
+            ord.gst_enabled ||
+            ord.is_gst ||
+            Number(ord.total_gst || ord.gst_amount || 0) > 0 ||
+            (totalAmt > 0 && rawSubtotal > 0 && totalAmt > rawSubtotal)
+          );
+          const gstAmount = Number(
+            ord.total_gst ||
+            ord.gst_amount ||
+            (isGst && totalAmt > rawSubtotal ? totalAmt - rawSubtotal : 0)
+          );
+          const subtotal = rawSubtotal > 0 && (rawSubtotal !== totalAmt || gstAmount === 0)
+            ? rawSubtotal
+            : (gstAmount > 0 ? totalAmt - gstAmount : totalAmt);
+          const gstPercentage = Number(
+            ord.gst_percentage ||
+            ord.gst_rate ||
+            (gstAmount > 0 && subtotal > 0 ? Math.round((gstAmount / subtotal) * 100) : (isGst ? 18 : 0))
+          );
+
+          return {
+            id: ord.invoice_no || String(ord.id),
+            customer_id: String(ord.user_id || ord.id),
+            customer_name: ord.customer_name || 'Customer',
+            customer_phone: ord.phone || '',
+            customer_address: ord.address || null,
+            status: mapStatus(ord.status),
+            subtotal,
+            total_amount: totalAmt,
+            total: totalAmt,
+            grand_total: totalAmt,
+            deposit_amount: depAmt,
+            deposit_payment_mode: (String(ord.payment_mode || 'CASH').toUpperCase()) as PaymentMode,
+            delivery_date: ord.delivery_date || ord.expected_delivery_date || null,
+            notes: ord.notes || null,
+            finalized_order_id: null,
+            finalized_at: null,
+            cancelled_at: null,
+            created_at: ord.created_at || new Date().toISOString(),
+            is_gst: isGst,
+            gst_percentage: gstPercentage,
+            gst_amount: gstAmount,
+            discount_amount: Number(ord.discount_amount || 0) + Number(ord.manual_discount_amount || 0),
+            discount_type: ord.manual_discount_type === 'percent' ? 'PERCENT' : 'FIXED',
+            discount_value: Number(ord.manual_discount_value || 0),
+            delivery_fee: Number(ord.delivery_charge || ord.delivery_fee || 0),
+            amount_paid: depAmt,
+            balance_due: Number(ord.balance_due ?? Math.max(0, totalAmt - depAmt)),
+            items: mappedAdvItems.length > 0 ? mappedAdvItems : [{
+              id: `${ord.id}-item`,
+              advance_order_id: ord.invoice_no || String(ord.id),
+              product_id: null,
+              snapshot_name: 'Tailoring Item',
+              snapshot_desc: null,
+              snapshot_price: totalAmt,
+              quantity: 1,
+            }],
+          } as any;
+        }
+      } catch {}
+    }
     return found || null;
   },
 
@@ -1694,6 +1956,13 @@ export const dbStore = {
     depositPaymentMode: PaymentMode;
     deliveryDate: string | null;
     notes: string | null;
+    isGst?: boolean;
+    gstPercentage?: number;
+    gstAmount?: number;
+    discountAmount?: number;
+    discountType?: 'PERCENT' | 'FIXED';
+    discountValue?: number;
+    deliveryFee?: number;
     items: {
       product_id: string | null;
       snapshot_name: string;
@@ -1745,6 +2014,7 @@ export const dbStore = {
         // 2. Also dual-persist to orders table with all query reconciliation flags:
         // order_type: 'ADVANCE', invoice_no: DEP-..., status: 'PENDING'
         try {
+          const isGst = Boolean(payload.isGst || (payload.gstAmount && payload.gstAmount > 0));
           const advOrdRow: Record<string, any> = {
             invoice_no: payload.advanceOrderId,
             customer_name: payload.customerName.trim() || 'Guest',
@@ -1758,10 +2028,14 @@ export const dbStore = {
             amount_paid: payload.depositAmount,
             subtotal: payload.subtotal,
             total: payload.totalAmount,
-            discount_amount: 0,
-            manual_discount_amount: 0,
-            total_gst: 0,
-            delivery_charge: 0,
+            discount_amount: payload.discountAmount || 0,
+            manual_discount_amount: payload.discountAmount || 0,
+            manual_discount_type: payload.discountType === 'PERCENT' ? 'percent' : 'flat',
+            manual_discount_value: payload.discountValue || 0,
+            gst_enabled: isGst,
+            total_gst: isGst ? (payload.gstAmount || 0) : 0,
+            gst_amount: isGst ? (payload.gstAmount || 0) : 0,
+            delivery_charge: payload.deliveryFee || 0,
             payment_mode: payload.depositPaymentMode,
             payment_method: payload.depositPaymentMode.toLowerCase(),
             cash_received: payload.depositAmount,
@@ -1833,14 +2107,17 @@ export const dbStore = {
 
         // When marked COMPLETED, fetch order total to recognize full payment and zero balance
         let orderTotal = 0;
+        let ordRows: any[] | null = null;
+        let advRows: any[] | null = null;
         try {
-          let sel = supabase.from('orders').select('id, total, grand_total');
+          let sel = supabase.from('orders').select('id, total, grand_total, deposit_amount, amount_paid');
           if (isUuid(id)) {
             sel = sel.or(keyFilter(id));
           } else {
             sel = sel.eq('invoice_no', id);
           }
-          const { data: ordRows } = await sel.limit(1);
+          const { data } = await sel.limit(1);
+          ordRows = data;
           if (ordRows && ordRows[0]) {
             orderTotal = Number(ordRows[0].total ?? ordRows[0].grand_total ?? 0);
           }
@@ -1850,13 +2127,14 @@ export const dbStore = {
 
         if (!orderTotal) {
           try {
-            let selAdv = supabase.from('advance_orders').select('id, total_amount');
+            let selAdv = supabase.from('advance_orders').select('id, total_amount, deposit_amount');
             if (isUuid(id)) {
               selAdv = selAdv.or(keyFilter(id, 'deposit_id'));
             } else {
               selAdv = selAdv.eq('deposit_id', id);
             }
-            const { data: advRows } = await selAdv.limit(1);
+            const { data } = await selAdv.limit(1);
+            advRows = data;
             if (advRows && advRows[0]) {
               orderTotal = Number(advRows[0].total_amount ?? 0);
             }
@@ -1870,6 +2148,9 @@ export const dbStore = {
           updated_at: new Date().toISOString(),
           ...(status === 'COMPLETED' ? { completed_at: new Date().toISOString() } : {}),
         };
+        if (status === 'COMPLETED' && orderTotal > 0) {
+          advUpdates.deposit_amount = orderTotal;
+        }
 
         let qAdv = supabase.from('advance_orders').update(advUpdates);
         if (isUuid(id)) {
@@ -1886,9 +2167,21 @@ export const dbStore = {
         };
         if (status === 'COMPLETED') {
           ordUpdates.balance_due = 0;
+          ordUpdates.credit_status = 'paid';
           if (orderTotal > 0) {
             ordUpdates.amount_paid = orderTotal;
             ordUpdates.cash_received = orderTotal;
+          }
+        } else if (status === 'PENDING' || status === 'READY') {
+          ordUpdates.credit_status = 'outstanding';
+          if (orderTotal > 0) {
+            const origDep = Number(advRows?.[0]?.deposit_amount ?? ordRows?.[0]?.deposit_amount ?? ordRows?.[0]?.amount_paid ?? 0);
+            if (origDep > 0 && origDep < orderTotal) {
+              ordUpdates.amount_paid = origDep;
+              ordUpdates.cash_received = origDep;
+              ordUpdates.balance_due = Math.max(0, orderTotal - origDep);
+              advUpdates.deposit_amount = origDep;
+            }
           }
         }
 
@@ -1931,6 +2224,7 @@ export const dbStore = {
       try {
         let qOrd = supabase.from('orders').update({
           status: 'CANCELLED',
+          balance_due: 0,
           updated_at: new Date().toISOString(),
         });
         if (isUuid(id)) {
@@ -2000,6 +2294,22 @@ export const dbStore = {
     paymentMode: PaymentMode;
     billDate: string;
   }): Promise<{ orderId: string }> {
+    // Idempotency check: if an order with this reference number or invoiceId already exists, do not duplicate
+    if (isSupabaseConfigured) {
+      try {
+        const { data: existing } = await supabase
+          .from('orders')
+          .select('invoice_no, id')
+          .or(`reference_number.eq.${payload.advanceOrderId},invoice_no.eq.${payload.invoiceId}`)
+          .limit(1)
+          .maybeSingle();
+        if (existing) {
+          await this.updateAdvanceOrderStatus(payload.advanceOrderId, 'COMPLETED');
+          return { orderId: existing.invoice_no || payload.invoiceId };
+        }
+      } catch {}
+    }
+
     const advance = await this.getAdvanceOrder(payload.advanceOrderId);
     if (!advance) throw new Error('Advance order not found');
 
@@ -2013,12 +2323,16 @@ export const dbStore = {
     }));
 
     const rawSubtotal = cart.reduce((acc, i) => acc + i.price * i.qty, 0);
-    const netInclusive = Math.max(0, rawSubtotal - payload.discountAmount);
-    const gstAmount =
-      payload.isGst && payload.gstPercentage > 0
-        ? netInclusive - netInclusive / (1 + payload.gstPercentage / 100)
-        : 0;
-    const grandTotal = netInclusive + payload.deliveryFee;
+    const orderTotals = calculateOrderTotals({
+      items: cart,
+      subtotal: rawSubtotal,
+      discount_amount: payload.discountAmount,
+      discount_type: payload.discountType,
+      discount_value: payload.discountValue,
+      is_gst: payload.isGst,
+      gst_percentage: payload.gstPercentage,
+      delivery_fee: payload.deliveryFee,
+    });
 
     const { orderId } = await this.submitOrder({
       orderId: payload.invoiceId,
@@ -2031,17 +2345,43 @@ export const dbStore = {
       items: cart,
       discountType: payload.discountType,
       discountValue: payload.discountValue,
-      discountAmount: payload.discountAmount,
-      gstPercentage: payload.isGst ? payload.gstPercentage : 0,
-      gstAmount,
-      deliveryFee: payload.deliveryFee,
-      grandTotal,
-      cashReceived: grandTotal,
+      discountAmount: orderTotals.discount,
+      gstPercentage: payload.isGst ? orderTotals.gstRate : 0,
+      gstAmount: orderTotals.gst,
+      deliveryFee: orderTotals.deliveryFee,
+      grandTotal: orderTotals.total,
+      cashReceived: orderTotals.total,
       paymentMode: payload.paymentMode,
+      referenceNumber: payload.advanceOrderId,
       remarks: `Advance order hold completed: #${payload.advanceOrderId}`,
     });
 
     await this.updateAdvanceOrderStatus(payload.advanceOrderId, 'COMPLETED');
+    if (isSupabaseConfigured) {
+      try {
+        await supabase
+          .from('advance_orders')
+          .update({
+            completed_order_id: payload.invoiceId,
+            invoice_number: payload.invoiceId,
+            status: 'completed',
+            deposit_amount: orderTotals.total,
+            completed_at: new Date().toISOString(),
+          })
+          .or(`id.eq.${payload.advanceOrderId},deposit_id.eq.${payload.advanceOrderId}`);
+
+        await supabase
+          .from('orders')
+          .update({
+            status: 'COMPLETED',
+            cash_received: orderTotals.total,
+            amount_paid: orderTotals.total,
+            balance_due: 0,
+            updated_at: new Date().toISOString(),
+          })
+          .or(`invoice_no.eq.${payload.advanceOrderId},id.eq.${payload.advanceOrderId}`);
+      } catch {}
+    }
 
     return { orderId };
   },

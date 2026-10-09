@@ -21,6 +21,7 @@ import { removeOrder } from "@/app/pos/actions";
 import { BRAND_EN } from "@/lib/brand";
 import { ORDER_STATUS } from "@/lib/orderStatus";
 import { normalizeOrder } from "@/lib/normalizeOrder";
+import { getOrderTotals } from "@/lib/orderTotals";
 
 export const dynamic = "force-dynamic";
 
@@ -184,8 +185,10 @@ export default function AdminOrdersPage() {
     }
 
     // 2. GST Filter
-    if (gstFilter === "GST" && !Boolean(o.is_gst)) return false;
-    if (gstFilter === "NONGST" && Boolean(o.is_gst)) return false;
+    const orderTotals = getOrderTotals(o);
+    const hasGst = orderTotals.gstAmount > 0;
+    if (gstFilter === "GST" && !hasGst) return false;
+    if (gstFilter === "NONGST" && hasGst) return false;
 
     // 3. Period Filter
     if (periodFilter === "ALL") return true;
@@ -223,15 +226,15 @@ export default function AdminOrdersPage() {
 
   // Calculate Realized Financial Totals strictly across filtered completed orders
   const totalRevenue = filteredOrders.reduce(
-    (sum, o) => sum + Number(o.grand_total || 0),
+    (sum, o) => sum + getOrderTotals(o).grandTotal,
     0
   );
   const totalTaxable = filteredOrders.reduce(
-    (sum, o) => sum + Number(o.subtotal || 0),
+    (sum, o) => sum + getOrderTotals(o).subtotal,
     0
   );
   const totalGst = filteredOrders.reduce(
-    (sum, o) => sum + Number(o.gst_amount || 0),
+    (sum, o) => sum + getOrderTotals(o).gstAmount,
     0
   );
   const totalOrdersCount = filteredOrders.length;
@@ -441,9 +444,10 @@ export default function AdminOrdersPage() {
                   filteredOrders.map((o) => {
                     const custName = o.customers?.name || o.customer_name || "Counter Customer";
                     const custPhone = o.customers?.phone || o.customer_phone || "";
-                    const subtotal = Number(o.subtotal) || 0;
-                    const gstAmount = Number(o.gst_amount) || 0;
-                    const grandTotal = Number(o.grand_total) || 0;
+                    const totals = getOrderTotals(o);
+                    const subtotal = totals.subtotal;
+                    const gstAmount = totals.gstAmount;
+                    const grandTotal = totals.grandTotal;
 
                     const dateStr = o.created_at
                       ? new Date(o.created_at).toLocaleDateString("en-IN", {
@@ -461,10 +465,12 @@ export default function AdminOrdersPage() {
                         })
                       : "";
 
+                    const displayInvoiceNo = (o.invoice_no || o.id || "").replace(/^DEP-/i, "INV-");
+
                     return (
                       <tr key={o.id} className="hover:bg-gray-50/60 transition-colors">
                         <td className="px-4 py-3 font-mono font-bold text-gray-900">
-                          {o.invoice_no || o.id}
+                          {displayInvoiceNo}
                           {(o.is_advance || o.order_type === "ADVANCE") && (
                             <span className="ml-1.5 px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[9px] font-bold rounded">
                               ADVANCE

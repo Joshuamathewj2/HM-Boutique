@@ -195,6 +195,13 @@ export async function createAdvanceOrder(payload: {
   depositPaymentMode: PaymentMode;
   deliveryDate: string | null;
   notes: string | null;
+  isGst?: boolean;
+  gstPercentage?: number;
+  gstAmount?: number;
+  discountAmount?: number;
+  discountType?: 'PERCENT' | 'FIXED';
+  discountValue?: number;
+  deliveryFee?: number;
   items: {
     product_id: string | null;
     snapshot_name: string;

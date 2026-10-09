@@ -4,33 +4,15 @@
 import { ORDER_STATUS } from './orderStatus';
 import { isUuid } from './ids';
 
+import { getOrderTotals } from './orderTotals';
+
 export function normalizeOrder(r: any) {
   if (!r) return null;
 
-  const total = Number(r.total ?? r.grand_total ?? r.grandTotal ?? 0);
-  const paid = Number(
-    r.amount_paid !== undefined && r.amount_paid !== null
-      ? r.amount_paid
-      : r.amountPaid !== undefined && r.amountPaid !== null
-      ? r.amountPaid
-      : r.cash_received !== undefined && r.cash_received !== null
-      ? r.cash_received
-      : r.cashReceived !== undefined && r.cashReceived !== null
-      ? r.cashReceived
-      : String(r.status || '').toUpperCase() === ORDER_STATUS.COMPLETED
-      ? total
-      : 0
-  );
-
-  const balance = Number(
-    r.balance_due !== undefined && r.balance_due !== null
-      ? r.balance_due
-      : r.balanceDue !== undefined && r.balanceDue !== null
-      ? r.balanceDue
-      : String(r.status || '').toUpperCase() === ORDER_STATUS.COMPLETED
-      ? 0
-      : Math.max(0, total - paid)
-  );
+  const totals = getOrderTotals(r);
+  const total = totals.grandTotal;
+  const paid = totals.paid;
+  const balance = totals.balance;
 
   const customerName = (r.customer_name ?? r.customerName ?? r.name ?? r.customers?.name ?? '').trim() || 'Counter Customer';
   const customerPhone = (r.phone ?? r.customer_phone ?? r.customerPhone ?? r.customers?.phone ?? '').trim();
@@ -49,7 +31,9 @@ export function normalizeOrder(r: any) {
   const isAdvance = Boolean(
     r.is_advance ||
     String(r.order_type || '').toUpperCase() === 'ADVANCE' ||
-    String(r.invoice_no || '').startsWith('DEP-')
+    String(r.invoice_no || '').startsWith('DEP-') ||
+    String(r.id || '').startsWith('DEP-') ||
+    Boolean(r.deposit_id)
   );
 
   const dueDate = r.due_date || r.credit_due_date || r.expected_delivery_date || null;
@@ -77,7 +61,12 @@ export function normalizeOrder(r: any) {
   }));
 
   const rawId = r.id ? String(r.id) : '';
-  const rawInvoiceNo = String(r.invoice_no || r.invoiceNo || r.deposit_id || r.depositId || '');
+  let rawInvoiceNo = String(r.invoice_no || r.invoiceNo || r.deposit_id || r.depositId || '');
+  if (status === 'COMPLETED' || status === 'PAID') {
+    if (rawInvoiceNo && rawInvoiceNo.startsWith('DEP-')) {
+      rawInvoiceNo = rawInvoiceNo.replace(/^DEP-/i, 'INV-');
+    }
+  }
   const id = isUuid(rawId) ? rawId : (isUuid(r.order_id) ? String(r.order_id) : rawId);
   const invoiceNo = rawInvoiceNo || (isUuid(rawId) ? '' : rawId);
 
@@ -94,7 +83,24 @@ export function normalizeOrder(r: any) {
     customerAddress,
     customer_address: customerAddress,
     address: customerAddress,
+    subtotal: totals.subtotal,
+    discount_amount: totals.discount,
+    discount_value: totals.discountValue,
+    discount_type: totals.discountType,
+    delivery_fee: totals.deliveryFee,
+    deliveryFee: totals.deliveryFee,
+    gst_percentage: totals.gstPercent,
+    gstPercentage: totals.gstPercent,
+    gst_rate: totals.gstPercent,
+    gstRate: totals.gstPercent,
+    gst_amount: totals.gstAmount,
+    gstAmount: totals.gstAmount,
+    cgst: totals.cgst,
+    sgst: totals.sgst,
+    is_gst: totals.gstAmount > 0,
+    isGst: totals.gstAmount > 0,
     total,
+    total_amount: total,
     grand_total: total,
     grandTotal: total,
     paid,

@@ -27,6 +27,7 @@ import { normalizeOrder, waLink, formatDDMMYYYY } from "@/lib/normalizeOrder";
 import { isUuid } from "@/lib/ids";
 import { toast } from "@/lib/toast";
 import { completeOrder } from "@/lib/completeOrder";
+import { calculateOrderTotals } from "@/lib/orderTotals";
 import { createPortal } from "react-dom";
 
 export const dynamic = "force-dynamic";
@@ -35,6 +36,8 @@ interface CreditOrderRecord {
   id: string; // Real database UUID
   invoiceNo?: string;
   invoice_no?: string;
+  invoice_number?: string;
+  order_id?: string;
   customer_name?: string;
   customer_phone?: string;
   phone?: string;
@@ -158,9 +161,9 @@ export default function AdminOutstandingCreditsPage() {
       toast.error('Internal error: row has no valid UUID');
       return;
     }
-    const orderTotal = Number(row.total ?? row.grand_total ?? 0);
+    const totals = calculateOrderTotals(row);
     const invoiceDisplay = row.invoiceNo || row.invoice_no || row.id;
-    const confirmMsg = `Mark credit invoice #${invoiceDisplay} (₹${formatINR(orderTotal)}) as Paid?`;
+    const confirmMsg = `Mark credit invoice #${invoiceDisplay} (₹${formatINR(totals.balance || totals.total)}) as Paid?`;
     if (!window.confirm(confirmMsg)) return;
 
     setSavingId(row.id);
@@ -251,8 +254,8 @@ export default function AdminOutstandingCreditsPage() {
   const handleWhatsAppShare = (ord: any) => {
     const custName = ord.customerName || ord.customer_name || "Valued Customer";
     const invNo = ord.invoiceNo || ord.invoice_no || ord.id;
-    const balance = Number(ord.balance ?? ord.balance_due ?? 0);
-    const balanceFormatted = formatINR(balance);
+    const totals = calculateOrderTotals(ord);
+    const balanceFormatted = formatINR(totals.balance);
 
     const message = `Hello ${custName},\nThis is a friendly reminder from ${BRAND_EN} regarding your pending credit invoice #${invNo} for ₹${balanceFormatted}.\nThank you!`;
     const link = waLink(ord.customerPhone || ord.phone || "", message);
@@ -313,22 +316,22 @@ export default function AdminOutstandingCreditsPage() {
     today.setHours(0, 0, 0, 0);
 
     creditOrders.forEach((o) => {
-      const orderTotal = Number(o.total ?? o.grand_total ?? 0);
-      const isCompleted = (o.status || "").toUpperCase() === ORDER_STATUS.COMPLETED;
-      const paid = Number(o.amount_paid ?? (isCompleted ? orderTotal : (o.cash_received || 0)));
-      const balance = Number(o.balance_due ?? (isCompleted ? 0 : Math.max(0, orderTotal - paid)));
+      const totals = calculateOrderTotals(o);
+      const isCompleted =
+        (o.status || "").toUpperCase() === ORDER_STATUS.COMPLETED ||
+        String(o.credit_status || "").toLowerCase() === "paid";
 
-      billed += orderTotal;
-      received += paid;
+      billed += totals.total;
+      received += totals.paid;
 
       if (!isCompleted) {
-        outstanding += balance;
+        outstanding += totals.balance;
         const dueStr = o.due_date || o.credit_due_date;
         if (dueStr) {
           const due = new Date(dueStr.includes("T") ? dueStr : `${dueStr}T00:00:00`);
           due.setHours(0, 0, 0, 0);
           if (!isNaN(due.getTime()) && due.getTime() < today.getTime()) {
-            overdue += balance;
+            overdue += totals.balance;
           }
         }
       }
@@ -568,10 +571,10 @@ export default function AdminOutstandingCreditsPage() {
                   displayOrders.map((ord) => {
                     const custName = ord.customer_name || "Counter Customer";
                     const custPhone = ord.customer_phone || ord.phone || "";
-                    const orderTotal = Number(ord.total ?? ord.grand_total ?? 0);
-                    const isCompleted = (ord.status || "").toUpperCase() === ORDER_STATUS.COMPLETED;
-                    const paid = Number(ord.amount_paid ?? (isCompleted ? orderTotal : (ord.cash_received || 0)));
-                    const balance = Number(ord.balance_due ?? (isCompleted ? 0 : Math.max(0, orderTotal - paid)));
+                    const totals = calculateOrderTotals(ord);
+                    const isCompleted =
+                      (ord.status || "").toUpperCase() === ORDER_STATUS.COMPLETED ||
+                      String(ord.credit_status || "").toLowerCase() === "paid";
                     const dueDateVal = ord.due_date || ord.credit_due_date;
                     const relativeTag = getRelativeDueDateTag(dueDateVal);
                     const saleDateFormatted = formatDDMMYYYY(ord.created_at || ord.bill_date);
@@ -579,7 +582,7 @@ export default function AdminOutstandingCreditsPage() {
                     return (
                       <tr key={ord.id} className="hover:bg-gray-50/60 transition-colors">
                         <td className="px-4 py-3 font-mono font-bold text-gray-900">
-                          {ord.invoiceNo || ord.invoice_no || ord.id}
+                          {ord.invoice_number || ord.invoiceNo || ord.invoice_no || ord.order_id || `#INV-${String(ord.id).slice(0, 8).toUpperCase()}`}
                         </td>
                         <td className="px-4 py-3 text-gray-700 font-medium">
                           {saleDateFormatted}
@@ -623,7 +626,7 @@ export default function AdminOutstandingCreditsPage() {
                           )}
                         </td>
                         <td className="px-4 py-3 text-right font-mono font-black text-rose-600 text-sm">
-                          ₹{formatINR(balance)}
+                          ₹{formatINR(isCompleted ? totals.total : totals.balance)}
                         </td>
                         <td className="px-4 py-3 text-center">
                           {isCompleted ? (
