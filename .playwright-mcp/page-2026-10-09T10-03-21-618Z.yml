@@ -1,0 +1,168 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e45]:
+      - generic [ref=e46]:
+        - generic [ref=e48]:
+          - img "HM Boutique" [ref=e49]
+          - generic [ref=e50]:
+            - generic [ref=e51]: HM BOUTIQUE
+            - generic [ref=e52]: School of Fashion Designing & Tailoring
+        - navigation [ref=e53]:
+          - button "Billing Panel" [ref=e54] [cursor=pointer]
+          - button "Advance Orders 1" [ref=e58] [cursor=pointer]:
+            - text: Advance Orders
+            - generic [ref=e62]: "1"
+          - button "Order History" [ref=e63] [cursor=pointer]
+          - button "Inventory" [ref=e68] [cursor=pointer]
+          - button "Attendance" [ref=e79] [cursor=pointer]
+          - button "Work Allocation" [ref=e84] [cursor=pointer]
+          - button "Coupons" [ref=e88] [cursor=pointer]
+          - button "Analytics Dashboard" [ref=e92] [cursor=pointer]
+          - button "Expense Tracker" [ref=e94] [cursor=pointer]
+          - button "Outstanding Credits" [ref=e98] [cursor=pointer]
+        - generic [ref=e101]:
+          - button "LOG OUT" [ref=e102] [cursor=pointer]
+          - generic [ref=e107]:
+            - generic [ref=e108]: A
+            - generic [ref=e109]:
+              - generic [ref=e110]: Admin Access
+              - generic [ref=e111]: Powered by Cenexa Systems
+    - main [ref=e112]:
+      - generic [ref=e113]:
+        - heading "HM BOUTIQUE" [level=1] [ref=e116]
+        - generic [ref=e117]:
+          - button "OFFLINE (POS)" [ref=e118] [cursor=pointer]
+          - button "ONLINE ORDER" [ref=e120] [cursor=pointer]
+      - generic [ref=e122]:
+        - generic [ref=e124]:
+          - heading "POS Billing Panel" [level=2] [ref=e125]
+          - paragraph [ref=e128]: Quick Invoice generator & database synced checkout
+        - generic [ref=e129]:
+          - generic [ref=e130]:
+            - generic [ref=e131]:
+              - heading "Customer Details" [level=2] [ref=e132]
+              - generic [ref=e136]:
+                - generic [ref=e137]:
+                  - generic [ref=e138]: Customer Name
+                  - textbox "Walk-in Customer" [ref=e139]
+                - generic [ref=e140]:
+                  - generic [ref=e141]: Mobile Number (WhatsApp)
+                  - textbox "Enter 10-digit number" [ref=e142]
+                - generic [ref=e143]:
+                  - generic [ref=e144]:
+                    - generic [ref=e145]: Bill Date
+                    - generic [ref=e148]: Custom / Past
+                  - textbox [ref=e149] [cursor=pointer]: 2026-10-09
+              - generic [ref=e150]:
+                - generic [ref=e151]: Customer Address (Optional)
+                - textbox "Enter full address" [ref=e152]
+            - generic [ref=e153]:
+              - generic [ref=e154]:
+                - heading "Order Items" [level=2] [ref=e155]
+                - generic [ref=e159]:
+                  - button "Clear Order" [ref=e160] [cursor=pointer]
+                  - button "Add To Catalog" [ref=e164] [cursor=pointer]
+                  - button "Add Custom Item" [ref=e169] [cursor=pointer]
+              - generic [ref=e171]:
+                - generic [ref=e172]:
+                  - generic [ref=e173]: Item Name / Description
+                  - generic [ref=e174]: Price (₹)
+                  - generic [ref=e175]: Qty
+                - generic [ref=e178]:
+                  - generic [ref=e179]:
+                    - textbox "Type custom item name..." [ref=e180]: "'I' Neck Blouse"
+                    - button "Catalog" [ref=e181] [cursor=pointer]
+                  - generic [ref=e183]:
+                    - spinbutton "0" [ref=e185]: "10000"
+                    - generic [ref=e187]:
+                      - button "−" [ref=e188] [cursor=pointer]
+                      - generic [ref=e189]: "1"
+                      - button "+" [ref=e190] [cursor=pointer]
+                    - button "Remove Item" [ref=e192] [cursor=pointer]
+          - generic [ref=e196]:
+            - generic [ref=e197]:
+              - heading "Current Order" [level=2] [ref=e198]
+              - generic [ref=e202]: OFFLINE (POS)
+            - generic [ref=e204]:
+              - generic [ref=e205]:
+                - generic [ref=e206]:
+                  - generic [ref=e207]: SOURCE
+                  - generic [ref=e208]: OFFLINE
+                - generic [ref=e209]:
+                  - generic [ref=e210]: CUSTOMER
+                  - generic [ref=e211]: "-"
+                - generic [ref=e212]:
+                  - generic [ref=e213]: PHONE
+                  - generic [ref=e214]: "-"
+                - generic [ref=e970]:
+                  - generic [ref=e971]: 1x 'I' Neck Blouse
+                  - generic [ref=e972]: ₹10,000.00
+              - generic [ref=e217]:
+                - generic [ref=e218]:
+                  - generic [ref=e219]: Manual Discount
+                  - generic [ref=e220]:
+                    - combobox [ref=e221] [cursor=pointer]:
+                      - option "₹" [selected]
+                      - option "%"
+                    - spinbutton "0" [ref=e222]
+                - generic [ref=e223]:
+                  - generic [ref=e224]: Coupon Discount
+                  - generic [ref=e226]:
+                    - textbox "e.g. WELCOME10" [ref=e227]
+                    - button "Apply" [disabled] [ref=e228] [cursor=pointer]
+                - generic [ref=e229]:
+                  - generic [ref=e230]:
+                    - generic [ref=e231]:
+                      - text: Subtotal (1 items)
+                      - generic [ref=e973]: (incl. GST)
+                    - generic [ref=e232]: ₹10,000.00
+                  - generic [ref=e233]:
+                    - generic [ref=e234]: Delivery
+                    - spinbutton "0" [ref=e235]
+                  - generic [ref=e236]:
+                    - generic [ref=e237]:
+                      - button "Non-GST Bill" [ref=e238] [cursor=pointer]
+                      - button "GST Invoice" [ref=e239] [cursor=pointer]
+                    - generic [ref=e974]:
+                      - generic [ref=e975]:
+                        - button "Exclusive (+GST)" [ref=e976] [cursor=pointer]
+                        - button "Inclusive (Tax incl.)" [ref=e977] [cursor=pointer]
+                      - generic [ref=e978]:
+                        - generic [ref=e979]: GST Rate
+                        - generic [ref=e980]:
+                          - spinbutton "%" [ref=e981]: "18"
+                          - generic [ref=e982]: "%"
+                      - generic [ref=e989]:
+                        - generic [ref=e990]: Taxable Base Value
+                        - generic [ref=e991]: ₹8,474.58
+                      - generic [ref=e983]:
+                        - generic [ref=e984]: GST Total (included)
+                        - generic [ref=e985]: ₹1,525.42
+                      - generic [ref=e986]:
+                        - generic [ref=e987]: CGST (9.0%) + SGST (9.0%)
+                        - generic [ref=e988]: ₹762.71 each
+                - generic [ref=e240]:
+                  - generic [ref=e241]: Financial Option
+                  - generic [ref=e242]:
+                    - button "CASH" [ref=e243] [cursor=pointer]
+                    - button "GPay" [ref=e244] [cursor=pointer]
+                    - button "Split" [ref=e245] [cursor=pointer]
+                    - button "Credit" [active] [ref=e246] [cursor=pointer]
+                - generic [ref=e247]:
+                  - generic [ref=e248]: Grand Total
+                  - generic [ref=e249]: ₹10,000.00
+                - generic [ref=e250]:
+                  - generic [ref=e992]: CREDIT SALE — DUE DATE *
+                  - textbox [ref=e993]
+                  - paragraph [ref=e994]: This sale is billed on credit. It shows as outstanding until marked paid, and you'll get an alert when the due date arrives.
+                - button "Complete Sale" [ref=e254] [cursor=pointer]
+      - generic [ref=e263]:
+        - generic [ref=e264]: © 2026 ALL RIGHTS RESERVED. HM BOUTIQUE.
+        - generic [ref=e265]:
+          - text: POWERED BY
+          - link "CENEXA SYSTEMS" [ref=e266] [cursor=pointer]:
+            - /url: https://www.cenexasystems.com/
+          - text: © 2026
+        - generic [ref=e267]: SCHOOL OF FASHION DESIGNING • TAILORING • AARI & EMBROIDERY
+  - button "Open Next.js Dev Tools" [ref=e11] [cursor=pointer]
+  - alert [ref=e44]

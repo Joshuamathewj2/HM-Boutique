@@ -2729,8 +2729,8 @@ export default function POSBilling() {
 
         {/* Floating PWA Install Card */}
         {deferredPrompt && !isPwaInstalled && (
-          <div className="fixed bottom-6 right-6 z-50 bg-black border border-teal-500/30 rounded-2xl p-3 px-4 flex items-center gap-3.5 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-300">
-            <div className="w-10 h-10 rounded-xl border border-teal-500/40 flex items-center justify-center text-teal-400 shrink-0">
+          <div className="fixed bottom-6 right-6 z-50 bg-black border border-pink-500/30 rounded-2xl p-3 px-4 flex items-center gap-3.5 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-300">
+            <div className="w-10 h-10 rounded-xl border border-pink-500/40 flex items-center justify-center text-pink-500 shrink-0">
               <Smartphone className="w-5 h-5" />
             </div>
             <div className="text-left">
@@ -2744,7 +2744,7 @@ export default function POSBilling() {
             <button
               type="button"
               onClick={handleInstallPwa}
-              className="bg-[#008f9c] hover:bg-[#007a85] text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer ml-1"
+              className="bg-[#e6007e] hover:bg-pink-700 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer ml-1"
             >
               <Download className="w-3.5 h-3.5" />
               INSTALL

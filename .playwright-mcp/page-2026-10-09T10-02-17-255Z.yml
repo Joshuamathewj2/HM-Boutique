@@ -1,0 +1,536 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e45]:
+      - generic [ref=e46]:
+        - generic [ref=e48]:
+          - img "HM Boutique" [ref=e49]
+          - generic [ref=e50]:
+            - generic [ref=e51]: HM BOUTIQUE
+            - generic [ref=e52]: School of Fashion Designing & Tailoring
+        - navigation [ref=e53]:
+          - button "Billing Panel" [ref=e54] [cursor=pointer]
+          - button "Advance Orders 1" [ref=e58] [cursor=pointer]:
+            - text: Advance Orders
+            - generic [ref=e62]: "1"
+          - button "Order History" [ref=e63] [cursor=pointer]
+          - button "Inventory" [ref=e68] [cursor=pointer]
+          - button "Attendance" [ref=e79] [cursor=pointer]
+          - button "Work Allocation" [ref=e84] [cursor=pointer]
+          - button "Coupons" [ref=e88] [cursor=pointer]
+          - button "Analytics Dashboard" [ref=e92] [cursor=pointer]
+          - button "Expense Tracker" [ref=e94] [cursor=pointer]
+          - button "Outstanding Credits" [ref=e98] [cursor=pointer]
+        - generic [ref=e101]:
+          - button "LOG OUT" [ref=e102] [cursor=pointer]
+          - generic [ref=e107]:
+            - generic [ref=e108]: A
+            - generic [ref=e109]:
+              - generic [ref=e110]: Admin Access
+              - generic [ref=e111]: Powered by Cenexa Systems
+    - main [ref=e112]:
+      - generic [ref=e113]:
+        - heading "HM BOUTIQUE" [level=1] [ref=e116]
+        - generic [ref=e117]:
+          - button "OFFLINE (POS)" [ref=e118] [cursor=pointer]
+          - button "ONLINE ORDER" [ref=e120] [cursor=pointer]
+      - generic [ref=e122]:
+        - generic [ref=e124]:
+          - heading "POS Billing Panel" [level=2] [ref=e125]
+          - paragraph [ref=e128]: Quick Invoice generator & database synced checkout
+        - generic [ref=e129]:
+          - generic [ref=e130]:
+            - generic [ref=e131]:
+              - heading "Customer Details" [level=2] [ref=e132]
+              - generic [ref=e136]:
+                - generic [ref=e137]:
+                  - generic [ref=e138]: Customer Name
+                  - textbox "Walk-in Customer" [ref=e139]
+                - generic [ref=e140]:
+                  - generic [ref=e141]: Mobile Number (WhatsApp)
+                  - textbox "Enter 10-digit number" [ref=e142]
+                - generic [ref=e143]:
+                  - generic [ref=e144]:
+                    - generic [ref=e145]: Bill Date
+                    - generic [ref=e148]: Custom / Past
+                  - textbox [ref=e149] [cursor=pointer]: 2026-10-09
+              - generic [ref=e150]:
+                - generic [ref=e151]: Customer Address (Optional)
+                - textbox "Enter full address" [ref=e152]
+            - generic [ref=e153]:
+              - generic [ref=e154]:
+                - heading "Order Items" [level=2] [ref=e155]
+                - generic [ref=e159]:
+                  - button "Clear Order" [ref=e160] [cursor=pointer]
+                  - button "Add To Catalog" [ref=e164] [cursor=pointer]
+                  - button "Add Custom Item" [ref=e169] [cursor=pointer]
+              - generic [ref=e171]:
+                - generic [ref=e172]:
+                  - generic [ref=e173]: Item Name / Description
+                  - generic [ref=e174]: Price (₹)
+                  - generic [ref=e175]: Qty
+                - generic [ref=e178]:
+                  - generic [ref=e179]:
+                    - textbox "Type custom item name..." [ref=e180]: Test Silk Saree
+                    - button "Catalog" [ref=e181] [cursor=pointer]
+                    - generic [ref=e270]:
+                      - generic [ref=e271]:
+                        - generic [ref=e272]:
+                          - textbox "Search catalog items..." [active] [ref=e273]
+                          - button [ref=e274] [cursor=pointer]
+                        - combobox [ref=e278] [cursor=pointer]:
+                          - option "All categories" [selected]
+                          - option "Tailoring"
+                          - option "BLOUSE ONLY"
+                          - option "Blouse Stitching"
+                          - option "SALWAR ONLY"
+                          - option "BASICS"
+                          - option "Aari & Embroidery"
+                          - option "DIPLOMA"
+                          - option "Salwar & Suits"
+                          - option "FASHION DESIGNING DIPLOMA"
+                          - option "Gowns & Lehengas"
+                          - option "Alterations & Repairs"
+                          - option "Fabrics & Materials"
+                      - generic [ref=e279]:
+                        - generic [ref=e280]:
+                          - button "'I' Neck Blouse 'I' Neck Blouse pattern covered under BLOUSE ONLY. ₹10000" [ref=e281] [cursor=pointer]:
+                            - generic [ref=e282]: "'I' Neck Blouse"
+                            - generic [ref=e284]: "'I' Neck Blouse pattern covered under BLOUSE ONLY."
+                            - generic [ref=e285]: ₹10000
+                          - generic [ref=e286]:
+                            - button "Edit item" [ref=e287] [cursor=pointer]
+                            - button "Delete item" [ref=e291] [cursor=pointer]
+                        - generic [ref=e295]:
+                          - button "A-line Top A-line Top pattern covered under SALWAR ONLY. ₹10000" [ref=e296] [cursor=pointer]:
+                            - generic [ref=e297]: A-line Top
+                            - generic [ref=e299]: A-line Top pattern covered under SALWAR ONLY.
+                            - generic [ref=e300]: ₹10000
+                          - generic [ref=e301]:
+                            - button "Edit item" [ref=e302] [cursor=pointer]
+                            - button "Delete item" [ref=e306] [cursor=pointer]
+                        - generic [ref=e310]:
+                          - button "Anarkali Model - 1 Anarkali Model - 1 pattern covered under FASHION DESIGNING DIPLOMA. ₹50000" [ref=e311] [cursor=pointer]:
+                            - generic [ref=e312]: Anarkali Model - 1
+                            - generic [ref=e314]: Anarkali Model - 1 pattern covered under FASHION DESIGNING DIPLOMA.
+                            - generic [ref=e315]: ₹50000
+                          - generic [ref=e316]:
+                            - button "Edit item" [ref=e317] [cursor=pointer]
+                            - button "Delete item" [ref=e321] [cursor=pointer]
+                        - generic [ref=e325]:
+                          - button "Anarkali Model - 2 Anarkali Model - 2 pattern covered under FASHION DESIGNING DIPLOMA. ₹50000" [ref=e326] [cursor=pointer]:
+                            - generic [ref=e327]: Anarkali Model - 2
+                            - generic [ref=e329]: Anarkali Model - 2 pattern covered under FASHION DESIGNING DIPLOMA.
+                            - generic [ref=e330]: ₹50000
+                          - generic [ref=e331]:
+                            - button "Edit item" [ref=e332] [cursor=pointer]
+                            - button "Delete item" [ref=e336] [cursor=pointer]
+                        - generic [ref=e340]:
+                          - button "Anarkali Salwar Anarkali Salwar pattern covered under SALWAR ONLY. ₹10000" [ref=e341] [cursor=pointer]:
+                            - generic [ref=e342]: Anarkali Salwar
+                            - generic [ref=e344]: Anarkali Salwar pattern covered under SALWAR ONLY.
+                            - generic [ref=e345]: ₹10000
+                          - generic [ref=e346]:
+                            - button "Edit item" [ref=e347] [cursor=pointer]
+                            - button "Delete item" [ref=e351] [cursor=pointer]
+                        - generic [ref=e355]:
+                          - button "Back Open Blouse Back Open Blouse pattern covered under BLOUSE ONLY. ₹10000" [ref=e356] [cursor=pointer]:
+                            - generic [ref=e357]: Back Open Blouse
+                            - generic [ref=e359]: Back Open Blouse pattern covered under BLOUSE ONLY.
+                            - generic [ref=e360]: ₹10000
+                          - generic [ref=e361]:
+                            - button "Edit item" [ref=e362] [cursor=pointer]
+                            - button "Delete item" [ref=e366] [cursor=pointer]
+                        - generic [ref=e370]:
+                          - button "Back Open Salwar Back Open Salwar pattern covered under BASICS. ₹8000" [ref=e371] [cursor=pointer]:
+                            - generic [ref=e372]: Back Open Salwar
+                            - generic [ref=e374]: Back Open Salwar pattern covered under BASICS.
+                            - generic [ref=e375]: ₹8000
+                          - generic [ref=e376]:
+                            - button "Edit item" [ref=e377] [cursor=pointer]
+                            - button "Delete item" [ref=e381] [cursor=pointer]
+                        - generic [ref=e385]:
+                          - button "Boat Neck Blouse Boat Neck Blouse pattern covered under BLOUSE ONLY. ₹10000" [ref=e386] [cursor=pointer]:
+                            - generic [ref=e387]: Boat Neck Blouse
+                            - generic [ref=e389]: Boat Neck Blouse pattern covered under BLOUSE ONLY.
+                            - generic [ref=e390]: ₹10000
+                          - generic [ref=e391]:
+                            - button "Edit item" [ref=e392] [cursor=pointer]
+                            - button "Delete item" [ref=e396] [cursor=pointer]
+                        - generic [ref=e400]:
+                          - button "Bombay Cut Blouse Bombay Cut Blouse pattern covered under FASHION DESIGNING DIPLOMA. ₹50000" [ref=e401] [cursor=pointer]:
+                            - generic [ref=e402]: Bombay Cut Blouse
+                            - generic [ref=e404]: Bombay Cut Blouse pattern covered under FASHION DESIGNING DIPLOMA.
+                            - generic [ref=e405]: ₹50000
+                          - generic [ref=e406]:
+                            - button "Edit item" [ref=e407] [cursor=pointer]
+                            - button "Delete item" [ref=e411] [cursor=pointer]
+                        - generic [ref=e415]:
+                          - button "Bridal Blouse Bridal Blouse pattern covered under BLOUSE ONLY. ₹10000" [ref=e416] [cursor=pointer]:
+                            - generic [ref=e417]: Bridal Blouse
+                            - generic [ref=e419]: Bridal Blouse pattern covered under BLOUSE ONLY.
+                            - generic [ref=e420]: ₹10000
+                          - generic [ref=e421]:
+                            - button "Edit item" [ref=e422] [cursor=pointer]
+                            - button "Delete item" [ref=e426] [cursor=pointer]
+                        - generic [ref=e430]:
+                          - button "Collar Blouse Collar Blouse pattern covered under BLOUSE ONLY. ₹10000" [ref=e431] [cursor=pointer]:
+                            - generic [ref=e432]: Collar Blouse
+                            - generic [ref=e434]: Collar Blouse pattern covered under BLOUSE ONLY.
+                            - generic [ref=e435]: ₹10000
+                          - generic [ref=e436]:
+                            - button "Edit item" [ref=e437] [cursor=pointer]
+                            - button "Delete item" [ref=e441] [cursor=pointer]
+                        - generic [ref=e445]:
+                          - button "Collar Salwar Collar Salwar pattern covered under SALWAR ONLY. ₹10000" [ref=e446] [cursor=pointer]:
+                            - generic [ref=e447]: Collar Salwar
+                            - generic [ref=e449]: Collar Salwar pattern covered under SALWAR ONLY.
+                            - generic [ref=e450]: ₹10000
+                          - generic [ref=e451]:
+                            - button "Edit item" [ref=e452] [cursor=pointer]
+                            - button "Delete item" [ref=e456] [cursor=pointer]
+                        - generic [ref=e460]:
+                          - button "Cross Cut Blouse Cross Cut Blouse pattern covered under BLOUSE ONLY. ₹10000" [ref=e461] [cursor=pointer]:
+                            - generic [ref=e462]: Cross Cut Blouse
+                            - generic [ref=e464]: Cross Cut Blouse pattern covered under BLOUSE ONLY.
+                            - generic [ref=e465]: ₹10000
+                          - generic [ref=e466]:
+                            - button "Edit item" [ref=e467] [cursor=pointer]
+                            - button "Delete item" [ref=e471] [cursor=pointer]
+                        - generic [ref=e475]:
+                          - button "Designer Blouse - 1 Designer Blouse - 1 pattern covered under BLOUSE ONLY. ₹10000" [ref=e476] [cursor=pointer]:
+                            - generic [ref=e477]: Designer Blouse - 1
+                            - generic [ref=e479]: Designer Blouse - 1 pattern covered under BLOUSE ONLY.
+                            - generic [ref=e480]: ₹10000
+                          - generic [ref=e481]:
+                            - button "Edit item" [ref=e482] [cursor=pointer]
+                            - button "Delete item" [ref=e486] [cursor=pointer]
+                        - generic [ref=e490]:
+                          - button "Designer Blouse - 2 Designer Blouse - 2 pattern covered under BLOUSE ONLY. ₹10000" [ref=e491] [cursor=pointer]:
+                            - generic [ref=e492]: Designer Blouse - 2
+                            - generic [ref=e494]: Designer Blouse - 2 pattern covered under BLOUSE ONLY.
+                            - generic [ref=e495]: ₹10000
+                          - generic [ref=e496]:
+                            - button "Edit item" [ref=e497] [cursor=pointer]
+                            - button "Delete item" [ref=e501] [cursor=pointer]
+                        - generic [ref=e505]:
+                          - button "Designer Salwar Designer Salwar pattern covered under SALWAR ONLY. ₹10000" [ref=e506] [cursor=pointer]:
+                            - generic [ref=e507]: Designer Salwar
+                            - generic [ref=e509]: Designer Salwar pattern covered under SALWAR ONLY.
+                            - generic [ref=e510]: ₹10000
+                          - generic [ref=e511]:
+                            - button "Edit item" [ref=e512] [cursor=pointer]
+                            - button "Delete item" [ref=e516] [cursor=pointer]
+                        - generic [ref=e520]:
+                          - button "Designing Salwar Designing Salwar pattern covered under DIPLOMA. ₹25000" [ref=e521] [cursor=pointer]:
+                            - generic [ref=e522]: Designing Salwar
+                            - generic [ref=e524]: Designing Salwar pattern covered under DIPLOMA.
+                            - generic [ref=e525]: ₹25000
+                          - generic [ref=e526]:
+                            - button "Edit item" [ref=e527] [cursor=pointer]
+                            - button "Delete item" [ref=e531] [cursor=pointer]
+                        - generic [ref=e535]:
+                          - button "Dhoti Pant Dhoti Pant pattern covered under FASHION DESIGNING DIPLOMA. ₹50000" [ref=e536] [cursor=pointer]:
+                            - generic [ref=e537]: Dhoti Pant
+                            - generic [ref=e539]: Dhoti Pant pattern covered under FASHION DESIGNING DIPLOMA.
+                            - generic [ref=e540]: ₹50000
+                          - generic [ref=e541]:
+                            - button "Edit item" [ref=e542] [cursor=pointer]
+                            - button "Delete item" [ref=e546] [cursor=pointer]
+                        - generic [ref=e550]:
+                          - button "Double Katori Cut Blouse Double Katori Cut Blouse pattern covered under BLOUSE ONLY. ₹10000" [ref=e551] [cursor=pointer]:
+                            - generic [ref=e552]: Double Katori Cut Blouse
+                            - generic [ref=e554]: Double Katori Cut Blouse pattern covered under BLOUSE ONLY.
+                            - generic [ref=e555]: ₹10000
+                          - generic [ref=e556]:
+                            - button "Edit item" [ref=e557] [cursor=pointer]
+                            - button "Delete item" [ref=e561] [cursor=pointer]
+                        - generic [ref=e565]:
+                          - button "Frock Frock pattern covered under BASICS. ₹8000" [ref=e566] [cursor=pointer]:
+                            - generic [ref=e567]: Frock
+                            - generic [ref=e569]: Frock pattern covered under BASICS.
+                            - generic [ref=e570]: ₹8000
+                          - generic [ref=e571]:
+                            - button "Edit item" [ref=e572] [cursor=pointer]
+                            - button "Delete item" [ref=e576] [cursor=pointer]
+                        - generic [ref=e580]:
+                          - button "Frock Model - 1 Frock Model - 1 pattern covered under FASHION DESIGNING DIPLOMA. ₹50000" [ref=e581] [cursor=pointer]:
+                            - generic [ref=e582]: Frock Model - 1
+                            - generic [ref=e584]: Frock Model - 1 pattern covered under FASHION DESIGNING DIPLOMA.
+                            - generic [ref=e585]: ₹50000
+                          - generic [ref=e586]:
+                            - button "Edit item" [ref=e587] [cursor=pointer]
+                            - button "Delete item" [ref=e591] [cursor=pointer]
+                        - generic [ref=e595]:
+                          - button "Frock Model - 2 Frock Model - 2 pattern covered under FASHION DESIGNING DIPLOMA. ₹50000" [ref=e596] [cursor=pointer]:
+                            - generic [ref=e597]: Frock Model - 2
+                            - generic [ref=e599]: Frock Model - 2 pattern covered under FASHION DESIGNING DIPLOMA.
+                            - generic [ref=e600]: ₹50000
+                          - generic [ref=e601]:
+                            - button "Edit item" [ref=e602] [cursor=pointer]
+                            - button "Delete item" [ref=e606] [cursor=pointer]
+                        - generic [ref=e610]:
+                          - button "Half Skirt Half Skirt pattern covered under DIPLOMA. ₹25000" [ref=e611] [cursor=pointer]:
+                            - generic [ref=e612]: Half Skirt
+                            - generic [ref=e614]: Half Skirt pattern covered under DIPLOMA.
+                            - generic [ref=e615]: ₹25000
+                          - generic [ref=e616]:
+                            - button "Edit item" [ref=e617] [cursor=pointer]
+                            - button "Delete item" [ref=e621] [cursor=pointer]
+                        - generic [ref=e625]:
+                          - button "High Neck Blouse High Neck Blouse pattern covered under DIPLOMA. ₹25000" [ref=e626] [cursor=pointer]:
+                            - generic [ref=e627]: High Neck Blouse
+                            - generic [ref=e629]: High Neck Blouse pattern covered under DIPLOMA.
+                            - generic [ref=e630]: ₹25000
+                          - generic [ref=e631]:
+                            - button "Edit item" [ref=e632] [cursor=pointer]
+                            - button "Delete item" [ref=e636] [cursor=pointer]
+                        - generic [ref=e640]:
+                          - button "High Neck Salwar High Neck Salwar pattern covered under SALWAR ONLY. ₹10000" [ref=e641] [cursor=pointer]:
+                            - generic [ref=e642]: High Neck Salwar
+                            - generic [ref=e644]: High Neck Salwar pattern covered under SALWAR ONLY.
+                            - generic [ref=e645]: ₹10000
+                          - generic [ref=e646]:
+                            - button "Edit item" [ref=e647] [cursor=pointer]
+                            - button "Delete item" [ref=e651] [cursor=pointer]
+                        - generic [ref=e655]:
+                          - button "Highneck Salwar Highneck Salwar pattern covered under DIPLOMA. ₹25000" [ref=e656] [cursor=pointer]:
+                            - generic [ref=e657]: Highneck Salwar
+                            - generic [ref=e659]: Highneck Salwar pattern covered under DIPLOMA.
+                            - generic [ref=e660]: ₹25000
+                          - generic [ref=e661]:
+                            - button "Edit item" [ref=e662] [cursor=pointer]
+                            - button "Delete item" [ref=e666] [cursor=pointer]
+                        - generic [ref=e670]:
+                          - button "In Skirt In Skirt pattern covered under BASICS. ₹8000" [ref=e671] [cursor=pointer]:
+                            - generic [ref=e672]: In Skirt
+                            - generic [ref=e674]: In Skirt pattern covered under BASICS.
+                            - generic [ref=e675]: ₹8000
+                          - generic [ref=e676]:
+                            - button "Edit item" [ref=e677] [cursor=pointer]
+                            - button "Delete item" [ref=e681] [cursor=pointer]
+                        - generic [ref=e685]:
+                          - button "Kali Salwar Kali Salwar pattern covered under SALWAR ONLY. ₹10000" [ref=e686] [cursor=pointer]:
+                            - generic [ref=e687]: Kali Salwar
+                            - generic [ref=e689]: Kali Salwar pattern covered under SALWAR ONLY.
+                            - generic [ref=e690]: ₹10000
+                          - generic [ref=e691]:
+                            - button "Edit item" [ref=e692] [cursor=pointer]
+                            - button "Delete item" [ref=e696] [cursor=pointer]
+                        - generic [ref=e700]:
+                          - button "Katori Cut Blouse (Double) Katori Cut Blouse (Double) pattern covered under DIPLOMA. ₹25000" [ref=e701] [cursor=pointer]:
+                            - generic [ref=e702]: Katori Cut Blouse (Double)
+                            - generic [ref=e704]: Katori Cut Blouse (Double) pattern covered under DIPLOMA.
+                            - generic [ref=e705]: ₹25000
+                          - generic [ref=e706]:
+                            - button "Edit item" [ref=e707] [cursor=pointer]
+                            - button "Delete item" [ref=e711] [cursor=pointer]
+                        - generic [ref=e715]:
+                          - button "Katori Cut Blouse (Single) Katori Cut Blouse (Single) pattern covered under DIPLOMA. ₹25000" [ref=e716] [cursor=pointer]:
+                            - generic [ref=e717]: Katori Cut Blouse (Single)
+                            - generic [ref=e719]: Katori Cut Blouse (Single) pattern covered under DIPLOMA.
+                            - generic [ref=e720]: ₹25000
+                          - generic [ref=e721]:
+                            - button "Edit item" [ref=e722] [cursor=pointer]
+                            - button "Delete item" [ref=e726] [cursor=pointer]
+                        - generic [ref=e730]:
+                          - button "Lining Blouse Lining Blouse pattern covered under BLOUSE ONLY. ₹10000" [ref=e731] [cursor=pointer]:
+                            - generic [ref=e732]: Lining Blouse
+                            - generic [ref=e734]: Lining Blouse pattern covered under BLOUSE ONLY.
+                            - generic [ref=e735]: ₹10000
+                          - generic [ref=e736]:
+                            - button "Edit item" [ref=e737] [cursor=pointer]
+                            - button "Delete item" [ref=e741] [cursor=pointer]
+                        - generic [ref=e745]:
+                          - button "Lining Salwar Lining Salwar pattern covered under SALWAR ONLY. ₹10000" [ref=e746] [cursor=pointer]:
+                            - generic [ref=e747]: Lining Salwar
+                            - generic [ref=e749]: Lining Salwar pattern covered under SALWAR ONLY.
+                            - generic [ref=e750]: ₹10000
+                          - generic [ref=e751]:
+                            - button "Edit item" [ref=e752] [cursor=pointer]
+                            - button "Delete item" [ref=e756] [cursor=pointer]
+                        - generic [ref=e760]:
+                          - button "Long Skirt Long Skirt pattern covered under BASICS. ₹8000" [ref=e761] [cursor=pointer]:
+                            - generic [ref=e762]: Long Skirt
+                            - generic [ref=e764]: Long Skirt pattern covered under BASICS.
+                            - generic [ref=e765]: ₹8000
+                          - generic [ref=e766]:
+                            - button "Edit item" [ref=e767] [cursor=pointer]
+                            - button "Delete item" [ref=e771] [cursor=pointer]
+                        - generic [ref=e775]:
+                          - button "Nighty Nighty pattern covered under BASICS. ₹8000" [ref=e776] [cursor=pointer]:
+                            - generic [ref=e777]: Nighty
+                            - generic [ref=e779]: Nighty pattern covered under BASICS.
+                            - generic [ref=e780]: ₹8000
+                          - generic [ref=e781]:
+                            - button "Edit item" [ref=e782] [cursor=pointer]
+                            - button "Delete item" [ref=e786] [cursor=pointer]
+                        - generic [ref=e790]:
+                          - button "Normal Blouse Normal Blouse pattern covered under BLOUSE ONLY. ₹10000" [ref=e791] [cursor=pointer]:
+                            - generic [ref=e792]: Normal Blouse
+                            - generic [ref=e794]: Normal Blouse pattern covered under BLOUSE ONLY.
+                            - generic [ref=e795]: ₹10000
+                          - generic [ref=e796]:
+                            - button "Edit item" [ref=e797] [cursor=pointer]
+                            - button "Delete item" [ref=e801] [cursor=pointer]
+                        - generic [ref=e805]:
+                          - button "Normal Salwar Normal Salwar pattern covered under SALWAR ONLY. ₹10000" [ref=e806] [cursor=pointer]:
+                            - generic [ref=e807]: Normal Salwar
+                            - generic [ref=e809]: Normal Salwar pattern covered under SALWAR ONLY.
+                            - generic [ref=e810]: ₹10000
+                          - generic [ref=e811]:
+                            - button "Edit item" [ref=e812] [cursor=pointer]
+                            - button "Delete item" [ref=e816] [cursor=pointer]
+                        - generic [ref=e820]:
+                          - button "Pallazo Pant Pallazo Pant pattern covered under FASHION DESIGNING DIPLOMA. ₹50000" [ref=e821] [cursor=pointer]:
+                            - generic [ref=e822]: Pallazo Pant
+                            - generic [ref=e824]: Pallazo Pant pattern covered under FASHION DESIGNING DIPLOMA.
+                            - generic [ref=e825]: ₹50000
+                          - generic [ref=e826]:
+                            - button "Edit item" [ref=e827] [cursor=pointer]
+                            - button "Delete item" [ref=e831] [cursor=pointer]
+                        - generic [ref=e835]:
+                          - button "Patch Work Blouse - 1 Patch Work Blouse - 1 pattern covered under FASHION DESIGNING DIPLOMA. ₹50000" [ref=e836] [cursor=pointer]:
+                            - generic [ref=e837]: Patch Work Blouse - 1
+                            - generic [ref=e839]: Patch Work Blouse - 1 pattern covered under FASHION DESIGNING DIPLOMA.
+                            - generic [ref=e840]: ₹50000
+                          - generic [ref=e841]:
+                            - button "Edit item" [ref=e842] [cursor=pointer]
+                            - button "Delete item" [ref=e846] [cursor=pointer]
+                        - generic [ref=e850]:
+                          - button "Pattern Salwar Pattern Salwar pattern covered under SALWAR ONLY. ₹10000" [ref=e851] [cursor=pointer]:
+                            - generic [ref=e852]: Pattern Salwar
+                            - generic [ref=e854]: Pattern Salwar pattern covered under SALWAR ONLY.
+                            - generic [ref=e855]: ₹10000
+                          - generic [ref=e856]:
+                            - button "Edit item" [ref=e857] [cursor=pointer]
+                            - button "Delete item" [ref=e861] [cursor=pointer]
+                        - generic [ref=e865]:
+                          - button "Patterns Blouse - 3 Patterns Blouse - 3 pattern covered under FASHION DESIGNING DIPLOMA. ₹50000" [ref=e866] [cursor=pointer]:
+                            - generic [ref=e867]: Patterns Blouse - 3
+                            - generic [ref=e869]: Patterns Blouse - 3 pattern covered under FASHION DESIGNING DIPLOMA.
+                            - generic [ref=e870]: ₹50000
+                          - generic [ref=e871]:
+                            - button "Edit item" [ref=e872] [cursor=pointer]
+                            - button "Delete item" [ref=e876] [cursor=pointer]
+                        - generic [ref=e880]:
+                          - button "Princess Cut Blouse - 1 Princess Cut Blouse - 1 pattern covered under BLOUSE ONLY. ₹10000" [ref=e881] [cursor=pointer]:
+                            - generic [ref=e882]: Princess Cut Blouse - 1
+                            - generic [ref=e884]: Princess Cut Blouse - 1 pattern covered under BLOUSE ONLY.
+                            - generic [ref=e885]: ₹10000
+                          - generic [ref=e886]:
+                            - button "Edit item" [ref=e887] [cursor=pointer]
+                            - button "Delete item" [ref=e891] [cursor=pointer]
+                        - generic [ref=e895]:
+                          - button "Raglan Blouse Raglan Blouse pattern covered under FASHION DESIGNING DIPLOMA. ₹50000" [ref=e896] [cursor=pointer]:
+                            - generic [ref=e897]: Raglan Blouse
+                            - generic [ref=e899]: Raglan Blouse pattern covered under FASHION DESIGNING DIPLOMA.
+                            - generic [ref=e900]: ₹50000
+                          - generic [ref=e901]:
+                            - button "Edit item" [ref=e902] [cursor=pointer]
+                            - button "Delete item" [ref=e906] [cursor=pointer]
+                        - generic [ref=e910]:
+                          - button "Short Top / Bell Bottom Short Top / Bell Bottom pattern covered under SALWAR ONLY. ₹10000" [ref=e911] [cursor=pointer]:
+                            - generic [ref=e912]: Short Top / Bell Bottom
+                            - generic [ref=e914]: Short Top / Bell Bottom pattern covered under SALWAR ONLY.
+                            - generic [ref=e915]: ₹10000
+                          - generic [ref=e916]:
+                            - button "Edit item" [ref=e917] [cursor=pointer]
+                            - button "Delete item" [ref=e921] [cursor=pointer]
+                        - generic [ref=e925]:
+                          - button "Single Katori Cut Blouse Single Katori Cut Blouse pattern covered under BLOUSE ONLY. ₹10000" [ref=e926] [cursor=pointer]:
+                            - generic [ref=e927]: Single Katori Cut Blouse
+                            - generic [ref=e929]: Single Katori Cut Blouse pattern covered under BLOUSE ONLY.
+                            - generic [ref=e930]: ₹10000
+                          - generic [ref=e931]:
+                            - button "Edit item" [ref=e932] [cursor=pointer]
+                            - button "Delete item" [ref=e936] [cursor=pointer]
+                        - generic [ref=e940]:
+                          - button "Zip Blouse Zip Blouse pattern covered under BLOUSE ONLY. ₹10000" [ref=e941] [cursor=pointer]:
+                            - generic [ref=e942]: Zip Blouse
+                            - generic [ref=e944]: Zip Blouse pattern covered under BLOUSE ONLY.
+                            - generic [ref=e945]: ₹10000
+                          - generic [ref=e946]:
+                            - button "Edit item" [ref=e947] [cursor=pointer]
+                            - button "Delete item" [ref=e951] [cursor=pointer]
+                        - generic [ref=e955]:
+                          - button "Zip Salwar Zip Salwar pattern covered under BASICS. ₹8000" [ref=e956] [cursor=pointer]:
+                            - generic [ref=e957]: Zip Salwar
+                            - generic [ref=e959]: Zip Salwar pattern covered under BASICS.
+                            - generic [ref=e960]: ₹8000
+                          - generic [ref=e961]:
+                            - button "Edit item" [ref=e962] [cursor=pointer]
+                            - button "Delete item" [ref=e966] [cursor=pointer]
+                  - generic [ref=e183]:
+                    - spinbutton "0" [ref=e185]
+                    - generic [ref=e187]:
+                      - button "−" [ref=e188] [cursor=pointer]
+                      - generic [ref=e189]: "1"
+                      - button "+" [ref=e190] [cursor=pointer]
+                    - button "Remove Item" [ref=e192] [cursor=pointer]
+          - generic [ref=e196]:
+            - generic [ref=e197]:
+              - heading "Current Order" [level=2] [ref=e198]
+              - generic [ref=e202]: OFFLINE (POS)
+            - generic [ref=e204]:
+              - generic [ref=e205]:
+                - generic [ref=e206]:
+                  - generic [ref=e207]: SOURCE
+                  - generic [ref=e208]: OFFLINE
+                - generic [ref=e209]:
+                  - generic [ref=e210]: CUSTOMER
+                  - generic [ref=e211]: "-"
+                - generic [ref=e212]:
+                  - generic [ref=e213]: PHONE
+                  - generic [ref=e214]: "-"
+                - generic [ref=e970]:
+                  - generic [ref=e971]: 1x Test Silk Saree
+                  - generic [ref=e972]: ₹0.00
+              - generic [ref=e217]:
+                - generic [ref=e218]:
+                  - generic [ref=e219]: Manual Discount
+                  - generic [ref=e220]:
+                    - combobox [ref=e221] [cursor=pointer]:
+                      - option "₹" [selected]
+                      - option "%"
+                    - spinbutton "0" [ref=e222]
+                - generic [ref=e223]:
+                  - generic [ref=e224]: Coupon Discount
+                  - generic [ref=e226]:
+                    - textbox "e.g. WELCOME10" [ref=e227]
+                    - button "Apply" [disabled] [ref=e228] [cursor=pointer]
+                - generic [ref=e229]:
+                  - generic [ref=e230]:
+                    - generic [ref=e231]: Subtotal (1 items)
+                    - generic [ref=e232]: ₹0.00
+                  - generic [ref=e233]:
+                    - generic [ref=e234]: Delivery
+                    - spinbutton "0" [ref=e235]
+                  - generic [ref=e237]:
+                    - button "Non-GST Bill" [ref=e238] [cursor=pointer]
+                    - button "GST Invoice" [ref=e239] [cursor=pointer]
+                - generic [ref=e240]:
+                  - generic [ref=e241]: Financial Option
+                  - generic [ref=e242]:
+                    - button "CASH" [ref=e243] [cursor=pointer]
+                    - button "GPay" [ref=e244] [cursor=pointer]
+                    - button "Split" [ref=e245] [cursor=pointer]
+                    - button "Credit" [ref=e246] [cursor=pointer]
+                - generic [ref=e247]:
+                  - generic [ref=e248]: Grand Total
+                  - generic [ref=e249]: ₹0.00
+                - generic [ref=e250]:
+                  - generic [ref=e251]: Cash Payment
+                  - generic [ref=e252]: Amount Received (₹)
+                  - spinbutton "0.00" [ref=e253]
+                - button "Complete Sale" [ref=e254] [cursor=pointer]
+                - button "Save as Advance Order" [ref=e258] [cursor=pointer]
+      - generic [ref=e263]:
+        - generic [ref=e264]: © 2026 ALL RIGHTS RESERVED. HM BOUTIQUE.
+        - generic [ref=e265]:
+          - text: POWERED BY
+          - link "CENEXA SYSTEMS" [ref=e266] [cursor=pointer]:
+            - /url: https://www.cenexasystems.com/
+          - text: © 2026
+        - generic [ref=e267]: SCHOOL OF FASHION DESIGNING • TAILORING • AARI & EMBROIDERY
+  - button "Open Next.js Dev Tools" [ref=e11] [cursor=pointer]
+  - alert [ref=e44]

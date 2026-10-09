@@ -1,0 +1,149 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e57]:
+      - generic [ref=e58]:
+        - generic [ref=e59]:
+          - generic [ref=e60]:
+            - generic [ref=e61]:
+              - img "Love & Happy Unisex Salon Logo" [ref=e63]
+              - generic [ref=e64]:
+                - generic [ref=e65]: Love & Happy
+                - generic [ref=e66]: Unisex Salon
+            - button "Close Menu" [ref=e67] [cursor=pointer]
+          - navigation [ref=e71]:
+            - button "Billing Panel" [ref=e72] [cursor=pointer]
+            - button "Advance Orders" [ref=e76] [cursor=pointer]
+            - button "Order History" [ref=e80] [cursor=pointer]
+            - button "Inventory" [ref=e85] [cursor=pointer]
+            - button "Analytics Dashboard" [ref=e96] [cursor=pointer]
+            - button "Expense Tracker" [ref=e98] [cursor=pointer]
+            - button "Log Out" [ref=e103] [cursor=pointer]
+        - generic [ref=e107]:
+          - generic [ref=e108]: A
+          - generic [ref=e109]:
+            - generic [ref=e110]: Admin Access
+            - generic [ref=e111]: V2.1.0 • PREMIUM POS
+    - main [ref=e112]:
+      - heading "Love & Happy Unisex Salon" [level=1] [ref=e116]
+      - generic [ref=e262]:
+        - generic [ref=e263]:
+          - generic [ref=e264]:
+            - generic [ref=e265]:
+              - heading "Bill Generated" [level=1] [ref=e266]
+              - generic [ref=e267]: Non-GST
+            - paragraph [ref=e268]: "#INV-2026-9JMLQ"
+          - button "New Sale" [ref=e269] [cursor=pointer]
+        - generic [ref=e271]:
+          - generic [ref=e272]:
+            - generic [ref=e273]: Payment Receipt
+            - generic [ref=e274]: Cash
+          - generic [ref=e275]:
+            - generic [ref=e276]: Grand Total
+            - generic [ref=e277]: ₹1,500.00
+          - generic [ref=e278]:
+            - generic [ref=e279]: Advance Paid (earlier)
+            - generic [ref=e280]: ₹30.00
+          - generic [ref=e281]:
+            - generic [ref=e282]: Actual Amount Received
+            - generic [ref=e283]: ₹1,500.00
+          - generic [ref=e284]:
+            - generic [ref=e285]: Change Returned
+            - generic [ref=e286]: ₹30.00
+        - generic [ref=e287]:
+          - button "Print Receipt" [ref=e288] [cursor=pointer]
+          - button "View" [ref=e293] [cursor=pointer]
+          - button "WhatsApp Invoice" [ref=e297] [cursor=pointer]
+          - button "New Sale" [ref=e300] [cursor=pointer]
+        - generic [ref=e302]:
+          - generic [ref=e303]: Items Sold
+          - generic [ref=e305]:
+            - generic [ref=e306]:
+              - text: Advance Care for Relax
+              - generic [ref=e307]: × 1 piece
+            - generic [ref=e308]: ₹1,500.00
+      - generic [ref=e309]:
+        - generic [ref=e310]:
+          - generic [ref=e311]:
+            - heading "Advance Orders" [level=2] [ref=e312]
+            - paragraph [ref=e313]: Partial-payment holds — revenue is recognized only when the balance is collected.
+          - generic [ref=e314]:
+            - generic [ref=e315]:
+              - generic [ref=e316]: "Period:"
+              - button "All Time" [ref=e317] [cursor=pointer]
+              - button "Today" [ref=e318] [cursor=pointer]
+              - button "This Week" [ref=e319] [cursor=pointer]
+              - button "This Month" [ref=e320] [cursor=pointer]
+              - button "This Year" [ref=e321] [cursor=pointer]
+            - generic [ref=e322]:
+              - generic [ref=e323]:
+                - generic [ref=e324]: "From:"
+                - textbox [ref=e325] [cursor=pointer]: 2026-10-09
+              - generic [ref=e326]:
+                - generic [ref=e327]: "To:"
+                - textbox [ref=e328] [cursor=pointer]: 2026-10-09
+        - generic [ref=e329]:
+          - generic [ref=e331]:
+            - paragraph [ref=e332]: Outstanding Balance
+            - paragraph [ref=e333]: ₹0.00
+          - generic [ref=e339]:
+            - paragraph [ref=e340]: Ready For Collection
+            - paragraph [ref=e341]: "0"
+          - generic [ref=e348]:
+            - paragraph [ref=e349]: Completed Deposits
+            - paragraph [ref=e350]: "1"
+        - generic [ref=e354]:
+          - textbox "Search by ID, customer, phone, product or status" [ref=e359]
+          - generic [ref=e360]:
+            - button "All" [ref=e361] [cursor=pointer]
+            - button "Pending" [ref=e362] [cursor=pointer]
+            - button "Ready" [ref=e363] [cursor=pointer]
+            - button "Completed" [ref=e364] [cursor=pointer]
+            - button "Cancelled" [ref=e365] [cursor=pointer]
+        - table [ref=e367]:
+          - rowgroup [ref=e368]:
+            - row [ref=e369]:
+              - columnheader "Deposit ID" [ref=e370]
+              - columnheader "Customer" [ref=e371]
+              - columnheader "Product" [ref=e372]
+              - columnheader "Total / Paid / Balance" [ref=e373]
+              - columnheader "Delivery" [ref=e374]
+              - columnheader "Status" [ref=e375]
+              - columnheader "Actions" [ref=e376]
+          - rowgroup [ref=e377]:
+            - row [ref=e378]:
+              - cell [ref=e379]:
+                - paragraph [ref=e380]: DEP-20261007-5038
+                - paragraph [ref=e381]: 10/7/2026
+              - cell [ref=e382]:
+                - paragraph [ref=e383]: H
+                - paragraph [ref=e384]: "3185946678"
+              - cell [ref=e385]:
+                - paragraph [ref=e386]: 1× Advance Care for Relax
+              - cell [ref=e387]:
+                - generic [ref=e388]:
+                  - paragraph [ref=e389]: "Total: ₹1,790.00"
+                  - paragraph [ref=e390]: "Paid: ₹30.00"
+                  - paragraph [ref=e391]: "Balance: ₹1,760.00"
+              - cell "—" [ref=e392]
+              - cell [ref=e393]:
+                - combobox [ref=e395] [cursor=pointer]:
+                  - option "PENDING"
+                  - option "READY"
+                  - option "COMPLETED" [selected]
+                  - option "CANCELLED"
+              - cell [ref=e396]:
+                - generic [ref=e397]:
+                  - button "Send on WhatsApp" [ref=e398] [cursor=pointer]
+                  - button "View invoice" [ref=e401] [cursor=pointer]
+                  - button "View details" [ref=e404] [cursor=pointer]
+                  - button "Delete" [ref=e408] [cursor=pointer]
+      - generic [ref=e255]:
+        - generic [ref=e256]: © 2026 All Rights Reserved. Love & Happy Unisex Salon.
+        - generic [ref=e257]:
+          - text: Powered By
+          - link "Cenexa Systems" [ref=e258] [cursor=pointer]:
+            - /url: https://www.cenexasystems.com/
+          - text: "@2026"
+        - generic [ref=e259]: Tailoring • Designer Wear • Alterations • Embroidery
+  - button "Open Next.js Dev Tools" [ref=e12] [cursor=pointer]
+  - alert [ref=e56]

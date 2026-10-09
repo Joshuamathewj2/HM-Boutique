@@ -1,0 +1,227 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e45]:
+      - generic [ref=e46]:
+        - generic [ref=e48]:
+          - img "HM Boutique" [ref=e49]
+          - generic [ref=e50]:
+            - generic [ref=e51]: HM BOUTIQUE
+            - generic [ref=e52]: School of Fashion Designing & Tailoring
+        - navigation [ref=e53]:
+          - button "Billing Panel" [ref=e54] [cursor=pointer]
+          - button "Advance Orders 1" [active] [ref=e58] [cursor=pointer]:
+            - text: Advance Orders
+            - generic [ref=e62]: "1"
+          - button "Order History" [ref=e63] [cursor=pointer]
+          - button "Inventory" [ref=e68] [cursor=pointer]
+          - button "Attendance" [ref=e79] [cursor=pointer]
+          - button "Work Allocation" [ref=e84] [cursor=pointer]
+          - button "Coupons" [ref=e88] [cursor=pointer]
+          - button "Analytics Dashboard" [ref=e92] [cursor=pointer]
+          - button "Expense Tracker" [ref=e94] [cursor=pointer]
+          - button "Outstanding Credits" [ref=e98] [cursor=pointer]
+        - generic [ref=e101]:
+          - button "LOG OUT" [ref=e102] [cursor=pointer]
+          - generic [ref=e107]:
+            - generic [ref=e108]: A
+            - generic [ref=e109]:
+              - generic [ref=e110]: Admin Access
+              - generic [ref=e111]: Powered by Cenexa Systems
+    - main [ref=e112]:
+      - heading "HM BOUTIQUE" [level=1] [ref=e116]
+      - generic [ref=e995]:
+        - generic [ref=e996]:
+          - generic [ref=e997]:
+            - heading "Advance Orders" [level=2] [ref=e998]
+            - paragraph [ref=e999]: Partial-payment holds — revenue is recognized only when the balance is collected.
+          - generic [ref=e1000]:
+            - generic [ref=e1001]:
+              - generic [ref=e1002]: "Period:"
+              - button "All Time" [ref=e1003] [cursor=pointer]
+              - button "Today" [ref=e1004] [cursor=pointer]
+              - button "This Week" [ref=e1005] [cursor=pointer]
+              - button "This Month" [ref=e1006] [cursor=pointer]
+              - button "This Year" [ref=e1007] [cursor=pointer]
+            - generic [ref=e1008]:
+              - generic [ref=e1009]:
+                - generic [ref=e1010]: "From:"
+                - textbox [ref=e1011] [cursor=pointer]: 2026-10-09
+              - generic [ref=e1012]:
+                - generic [ref=e1013]: "To:"
+                - textbox [ref=e1014] [cursor=pointer]: 2026-10-09
+        - generic [ref=e1015]:
+          - generic [ref=e1017]:
+            - paragraph [ref=e1018]: Outstanding Balance
+            - paragraph [ref=e1019]: ₹9,910.00
+          - generic [ref=e1025]:
+            - paragraph [ref=e1026]: Ready For Collection
+            - paragraph [ref=e1027]: "0"
+          - generic [ref=e1034]:
+            - paragraph [ref=e1035]: Completed Deposits
+            - paragraph [ref=e1036]: "5"
+        - generic [ref=e1040]:
+          - textbox "Search by ID, customer, phone, product or status" [ref=e1045]
+          - generic [ref=e1046]:
+            - button "All" [ref=e1047] [cursor=pointer]
+            - button "Pending" [ref=e1048] [cursor=pointer]
+            - button "Ready" [ref=e1049] [cursor=pointer]
+            - button "Completed" [ref=e1050] [cursor=pointer]
+            - button "Cancelled" [ref=e1051] [cursor=pointer]
+        - generic [ref=e1052]:
+          - generic [ref=e1053]:
+            - generic [ref=e1054]: Deposit ID
+            - generic [ref=e1055]: Customer
+            - generic [ref=e1056]: Product
+            - generic [ref=e1057]: Total / Paid / Balance
+            - generic [ref=e1058]: Delivery
+            - generic [ref=e1059]: Status
+            - generic [ref=e1060]: Actions
+          - generic [ref=e1061]:
+            - generic [ref=e1062]:
+              - paragraph [ref=e1063]: DEP-20261009-6751
+              - paragraph [ref=e1064]: 10/9/2026
+            - generic [ref=e1065]:
+              - paragraph [ref=e1066]: tuhda
+              - paragraph [ref=e1067]: "3213131231"
+            - paragraph [ref=e1069]: 1× A-line Top
+            - generic [ref=e1070]:
+              - paragraph [ref=e1071]: "Total: ₹10,000.00"
+              - paragraph [ref=e1072]: "Paid: ₹90.00"
+              - paragraph [ref=e1073]: "Balance: ₹9,910.00"
+            - generic [ref=e1074]: 10/16/2026
+            - combobox [ref=e1076] [cursor=pointer]:
+              - option "Pending" [selected]
+              - option "Ready"
+              - option "Completed"
+              - option "Cancelled"
+            - generic [ref=e1077]:
+              - button "Send on WhatsApp" [ref=e1078] [cursor=pointer]
+              - button "View Invoice" [ref=e1081] [cursor=pointer]
+              - button "View details" [ref=e1084] [cursor=pointer]
+              - button "Receive balance" [ref=e1088] [cursor=pointer]
+              - button "Delete" [ref=e1092] [cursor=pointer]
+          - generic [ref=e1096]:
+            - generic [ref=e1097]:
+              - paragraph [ref=e1098]: DEP-20261009-8186
+              - paragraph [ref=e1099]: 10/9/2026
+            - generic [ref=e1100]:
+              - paragraph [ref=e1101]: ttt
+              - paragraph [ref=e1102]: "4564545343"
+            - paragraph [ref=e1104]: 1× 'I' Neck Blouse
+            - generic [ref=e1105]:
+              - paragraph [ref=e1106]: "Total: ₹11,800.00"
+              - paragraph [ref=e1107]: "Paid: ₹11,800.00"
+              - paragraph [ref=e1108]: "Balance: ₹0.00"
+            - generic [ref=e1109]: 10/16/2026
+            - combobox [ref=e1111] [cursor=pointer]:
+              - option "Pending"
+              - option "Ready"
+              - option "Completed" [selected]
+              - option "Cancelled"
+            - generic [ref=e1112]:
+              - button "Send on WhatsApp" [ref=e1113] [cursor=pointer]
+              - button "View Invoice" [ref=e1116] [cursor=pointer]
+              - button "View details" [ref=e1119] [cursor=pointer]
+              - button "Delete" [ref=e1124] [cursor=pointer]
+          - generic [ref=e1128]:
+            - generic [ref=e1129]:
+              - paragraph [ref=e1130]: DEP-20261008-1189
+              - paragraph [ref=e1131]: 10/8/2026
+            - generic [ref=e1132]:
+              - paragraph [ref=e1133]: jio
+              - paragraph [ref=e1134]: "2313233123"
+            - paragraph [ref=e1136]: 1× 'I' Neck Blouse
+            - generic [ref=e1137]:
+              - paragraph [ref=e1138]: "Total: ₹11,800.00"
+              - paragraph [ref=e1139]: "Paid: ₹11,800.00"
+              - paragraph [ref=e1140]: "Balance: ₹0.00"
+            - generic [ref=e1141]: 10/15/2026
+            - combobox [ref=e1143] [cursor=pointer]:
+              - option "Pending"
+              - option "Ready"
+              - option "Completed" [selected]
+              - option "Cancelled"
+            - generic [ref=e1144]:
+              - button "Send on WhatsApp" [ref=e1145] [cursor=pointer]
+              - button "View Invoice" [ref=e1148] [cursor=pointer]
+              - button "View details" [ref=e1151] [cursor=pointer]
+              - button "Delete" [ref=e1156] [cursor=pointer]
+          - generic [ref=e1160]:
+            - generic [ref=e1161]:
+              - paragraph [ref=e1162]: DEP-20261008-4297
+              - paragraph [ref=e1163]: 10/8/2026
+            - generic [ref=e1164]:
+              - paragraph [ref=e1165]: test5
+              - paragraph [ref=e1166]: "3216351827"
+            - paragraph [ref=e1168]: 1× 'I' Neck Blouse
+            - generic [ref=e1169]:
+              - paragraph [ref=e1170]: "Total: ₹11,693.80"
+              - paragraph [ref=e1171]: "Paid: ₹11,693.80"
+              - paragraph [ref=e1172]: "Balance: ₹0.00"
+            - generic [ref=e1173]: 10/15/2026
+            - combobox [ref=e1175] [cursor=pointer]:
+              - option "Pending"
+              - option "Ready"
+              - option "Completed" [selected]
+              - option "Cancelled"
+            - generic [ref=e1176]:
+              - button "Send on WhatsApp" [ref=e1177] [cursor=pointer]
+              - button "View Invoice" [ref=e1180] [cursor=pointer]
+              - button "View details" [ref=e1183] [cursor=pointer]
+              - button "Delete" [ref=e1188] [cursor=pointer]
+          - generic [ref=e1192]:
+            - generic [ref=e1193]:
+              - paragraph [ref=e1194]: DEP-20261008-4535
+              - paragraph [ref=e1195]: 10/8/2026
+            - generic [ref=e1196]:
+              - paragraph [ref=e1197]: hi
+              - paragraph [ref=e1198]: "3211323213"
+            - paragraph [ref=e1200]: 1× 'I' Neck Blouse
+            - generic [ref=e1201]:
+              - paragraph [ref=e1202]: "Total: ₹10,000.00"
+              - paragraph [ref=e1203]: "Paid: ₹10,000.00"
+              - paragraph [ref=e1204]: "Balance: ₹0.00"
+            - generic [ref=e1205]: 10/15/2026
+            - combobox [ref=e1207] [cursor=pointer]:
+              - option "Pending"
+              - option "Ready"
+              - option "Completed" [selected]
+              - option "Cancelled"
+            - generic [ref=e1208]:
+              - button "Send on WhatsApp" [ref=e1209] [cursor=pointer]
+              - button "View Invoice" [ref=e1212] [cursor=pointer]
+              - button "View details" [ref=e1215] [cursor=pointer]
+              - button "Delete" [ref=e1220] [cursor=pointer]
+          - generic [ref=e1224]:
+            - generic [ref=e1225]:
+              - paragraph [ref=e1226]: DEP-20261008-3814
+              - paragraph [ref=e1227]: 10/8/2026
+            - generic [ref=e1228]:
+              - paragraph [ref=e1229]: test4
+              - paragraph [ref=e1230]: "1232314313"
+            - paragraph [ref=e1232]: 1× 'I' Neck Blouse
+            - generic [ref=e1233]:
+              - paragraph [ref=e1234]: "Total: ₹11,800.00"
+              - paragraph [ref=e1235]: "Paid: ₹11,800.00"
+              - paragraph [ref=e1236]: "Balance: ₹0.00"
+            - generic [ref=e1237]: 10/15/2026
+            - combobox [ref=e1239] [cursor=pointer]:
+              - option "Pending"
+              - option "Ready"
+              - option "Completed" [selected]
+              - option "Cancelled"
+            - generic [ref=e1240]:
+              - button "Send on WhatsApp" [ref=e1241] [cursor=pointer]
+              - button "View Invoice" [ref=e1244] [cursor=pointer]
+              - button "View details" [ref=e1247] [cursor=pointer]
+              - button "Delete" [ref=e1252] [cursor=pointer]
+      - generic [ref=e263]:
+        - generic [ref=e264]: © 2026 ALL RIGHTS RESERVED. HM BOUTIQUE.
+        - generic [ref=e265]:
+          - text: POWERED BY
+          - link "CENEXA SYSTEMS" [ref=e266] [cursor=pointer]:
+            - /url: https://www.cenexasystems.com/
+          - text: © 2026
+        - generic [ref=e267]: SCHOOL OF FASHION DESIGNING • TAILORING • AARI & EMBROIDERY
+  - button "Open Next.js Dev Tools" [ref=e11] [cursor=pointer]
+  - alert [ref=e44]

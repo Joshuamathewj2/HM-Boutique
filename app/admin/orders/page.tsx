@@ -15,6 +15,7 @@ import {
   CreditCard,
   ShoppingBag,
   TrendingUp,
+  AlertCircle,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { removeOrder } from "@/app/pos/actions";
@@ -71,11 +72,41 @@ interface OrderRecord {
   items?: OrderItem[];
 }
 
+// ─── Skeleton components ───────────────────────────────────────────────────────
+
+function StatCardSkeleton() {
+  return (
+    <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs flex justify-between items-center animate-pulse">
+      <div className="space-y-2">
+        <div className="h-2.5 bg-gray-200 rounded w-32" />
+        <div className="h-6 bg-gray-200 rounded w-24 mt-1" />
+        <div className="h-2 bg-gray-100 rounded w-36 mt-1" />
+      </div>
+      <div className="w-10 h-10 rounded-xl bg-gray-100" />
+    </div>
+  );
+}
+
+function TableRowSkeleton() {
+  return (
+    <tr className="animate-pulse">
+      {Array.from({ length: 9 }).map((_, i) => (
+        <td key={i} className="px-4 py-3">
+          <div className="h-3 bg-gray-100 rounded w-full" />
+        </td>
+      ))}
+    </tr>
+  );
+}
+
+// ─── Main component ────────────────────────────────────────────────────────────
+
 export default function AdminOrdersPage() {
   const router = useRouter();
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("ALL");
   const [gstFilter, setGstFilter] = useState<"ALL" | "GST" | "NONGST">("ALL");
@@ -89,17 +120,28 @@ export default function AdminOrdersPage() {
   const fetchOrders = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
+    setFetchError(null);
 
     try {
-      // Supabase query: Fetch strictly completed orders
-      let { data, error } = await supabase
+      // Column names verified against actual DB schema:
+      // phone (not customer_phone), total (not grand_total), total_gst, gst_enabled,
+      // delivery_charge, manual_discount_type/value, no gst_percentage/bill_date columns
+      const { data, error } = await supabase
         .from("orders")
-        .select("*, order_items(*)")
+        .select(
+          "id, invoice_no, customer_name, phone, address, status, order_type, is_advance," +
+          " is_credit, credit_status, subtotal, gst_enabled, total_gst, gst_amount," +
+          " total, delivery_charge, shipping, discount_amount, manual_discount_amount," +
+          " manual_discount_type, manual_discount_value, payment_mode, payment_method," +
+          " amount_paid, balance_due, cash_received, created_at, items," +
+          " order_items(id, product_name, name, quantity, base_price, line_total)"
+        )
         .eq("status", "COMPLETED")
         .order("created_at", { ascending: false });
 
       if (error) {
         console.error("Order fetch error:", error);
+        setFetchError(error.message);
         return;
       }
 
@@ -109,8 +151,9 @@ export default function AdminOrdersPage() {
         .filter((order: any) => (order?.status || "").toUpperCase() === ORDER_STATUS.COMPLETED);
 
       setOrders(visibleOrders as any);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to load orders:", err);
+      setFetchError(err?.message || "Failed to load order history");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -295,75 +338,86 @@ export default function AdminOrdersPage() {
           </div>
         </div>
 
-        {/* Realized Sales Summary Cards */}
+        {/* Realized Sales Summary Cards — skeleton while loading */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs flex justify-between items-center">
-            <div>
-              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
-                Total Realized Sales
-              </p>
-              <p className="text-xl font-black text-[#F500A0] mt-1 font-mono">
-                ₹{formatINR(totalRevenue)}
-              </p>
-              <p className="text-[10px] text-gray-400 mt-0.5">
-                Across {totalOrdersCount} completed bills
-              </p>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-pink-50 flex items-center justify-center text-[#F500A0]">
-              <TrendingUp className="w-5 h-5" />
-            </div>
-          </div>
+          {loading ? (
+            <>
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+            </>
+          ) : (
+            <>
+              <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs flex justify-between items-center">
+                <div>
+                  <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                    Total Realized Sales
+                  </p>
+                  <p className="text-xl font-black text-[#F500A0] mt-1 font-mono">
+                    ₹{formatINR(totalRevenue)}
+                  </p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">
+                    Across {totalOrdersCount} completed bills
+                  </p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-pink-50 flex items-center justify-center text-[#F500A0]">
+                  <TrendingUp className="w-5 h-5" />
+                </div>
+              </div>
 
-          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs flex justify-between items-center">
-            <div>
-              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
-                Completed Orders
-              </p>
-              <p className="text-xl font-black text-gray-900 mt-1">
-                {totalOrdersCount}
-              </p>
-              <p className="text-[10px] text-gray-400 mt-0.5">
-                Standard sales + settled deposits
-              </p>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
-              <ShoppingBag className="w-5 h-5" />
-            </div>
-          </div>
+              <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs flex justify-between items-center">
+                <div>
+                  <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                    Completed Orders
+                  </p>
+                  <p className="text-xl font-black text-gray-900 mt-1">
+                    {totalOrdersCount}
+                  </p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">
+                    Standard sales + settled deposits
+                  </p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+                  <ShoppingBag className="w-5 h-5" />
+                </div>
+              </div>
 
-          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs flex justify-between items-center">
-            <div>
-              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
-                Total Taxable Value
-              </p>
-              <p className="text-xl font-black text-gray-900 mt-1 font-mono">
-                ₹{formatINR(totalTaxable)}
-              </p>
-              <p className="text-[10px] text-gray-400 mt-0.5">
-                Excludes GST &amp; delivery
-              </p>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
-              <CreditCard className="w-5 h-5" />
-            </div>
-          </div>
+              <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs flex justify-between items-center">
+                <div>
+                  <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                    Total Taxable Value
+                  </p>
+                  <p className="text-xl font-black text-gray-900 mt-1 font-mono">
+                    ₹{formatINR(totalTaxable)}
+                  </p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">
+                    Excludes GST &amp; delivery
+                  </p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
+                  <CreditCard className="w-5 h-5" />
+                </div>
+              </div>
 
-          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs flex justify-between items-center">
-            <div>
-              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
-                Average Bill Value
-              </p>
-              <p className="text-xl font-black text-gray-900 mt-1 font-mono">
-                ₹{formatINR(avgBillValue)}
-              </p>
-              <p className="text-[10px] text-gray-400 mt-0.5">
-                Per finalized customer sale
-              </p>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600">
-              <Calendar className="w-5 h-5" />
-            </div>
-          </div>
+              <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs flex justify-between items-center">
+                <div>
+                  <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                    Average Bill Value
+                  </p>
+                  <p className="text-xl font-black text-gray-900 mt-1 font-mono">
+                    ₹{formatINR(avgBillValue)}
+                  </p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">
+                    Per finalized customer sale
+                  </p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600">
+                  <Calendar className="w-5 h-5" />
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Filters and Search Bar */}
@@ -429,12 +483,29 @@ export default function AdminOrdersPage() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {loading ? (
+                  /* Skeleton rows — never show empty state or zeros while loading */
+                  Array.from({ length: 7 }).map((_, i) => (
+                    <TableRowSkeleton key={i} />
+                  ))
+                ) : fetchError ? (
+                  /* Error state with retry */
                   <tr>
-                    <td colSpan={9} className="p-12 text-center text-xs font-semibold text-gray-400">
-                      Loading orders history...
+                    <td colSpan={9} className="p-12 text-center">
+                      <div className="flex flex-col items-center gap-3">
+                        <AlertCircle className="w-8 h-8 text-red-400" />
+                        <p className="text-sm font-bold text-red-600">Failed to load order history</p>
+                        <p className="text-xs text-gray-500 max-w-sm">{fetchError}</p>
+                        <button
+                          onClick={() => fetchOrders()}
+                          className="px-4 py-2 bg-[#F500A0] text-white text-xs font-bold rounded-xl hover:bg-[#D4008A] transition-colors cursor-pointer"
+                        >
+                          Retry
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ) : filteredOrders.length === 0 ? (
+                  /* Empty state — only shown when loading is DONE and result is truly empty */
                   <tr>
                     <td colSpan={9} className="p-12 text-center text-xs font-bold text-gray-500">
                       No matching completed orders found.

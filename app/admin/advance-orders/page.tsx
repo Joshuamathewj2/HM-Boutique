@@ -61,11 +61,41 @@ interface AdvanceOrderRecord {
   created_at: string;
 }
 
+// ─── Skeleton components ───────────────────────────────────────────────────────
+
+function StatCardSkeleton() {
+  return (
+    <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs flex justify-between items-center animate-pulse">
+      <div className="space-y-2">
+        <div className="h-2.5 bg-gray-200 rounded w-28" />
+        <div className="h-7 bg-gray-200 rounded w-20 mt-1" />
+        <div className="h-2 bg-gray-100 rounded w-36 mt-1" />
+      </div>
+      <div className="w-10 h-10 rounded-xl bg-gray-100" />
+    </div>
+  );
+}
+
+function TableRowSkeleton({ cols }: { cols: number }) {
+  return (
+    <tr className="animate-pulse">
+      {Array.from({ length: cols }).map((_, i) => (
+        <td key={i} className="px-4 py-3">
+          <div className="h-3 bg-gray-100 rounded w-full" />
+        </td>
+      ))}
+    </tr>
+  );
+}
+
+// ─── Main component ────────────────────────────────────────────────────────────
+
 export default function AdminAdvanceOrdersPage() {
   const router = useRouter();
   const [advanceOrders, setAdvanceOrders] = useState<AdvanceOrderRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<
     "ALL" | "PENDING" | "READY" | "COMPLETED" | "CANCELLED"
@@ -82,7 +112,7 @@ export default function AdminAdvanceOrdersPage() {
     });
 
   const loadData = useCallback(async (isRefresh = false) => {
-    // If a status update is active or just completed within 2.5s, skip focus refetch to prevent overwriting with stale data
+    // If a status update is active or just completed within 2.5s, skip focus refetch
     if (isRefresh && (isMutatingRef.current || Date.now() - lastMutationAtRef.current < 2500)) {
       return;
     }
@@ -90,32 +120,49 @@ export default function AdminAdvanceOrdersPage() {
     const seq = ++fetchSeqRef.current;
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
+    setFetchError(null);
 
     try {
-      await supabase.auth.getSession();
+      // ① Removed sequential await supabase.auth.getSession() — it adds a
+      //   waterfall step. The Supabase client auto-attaches the session header;
+      //   there is no user-specific RLS on orders, so we skip it here.
 
-      // Single source of truth: public.orders
+      // ② Removed invoice_no.ilike.DEP-% from OR filter — it forces a full
+      //   sequential scan. is_advance=true + order_type=ADVANCE already cover
+      //   all advance rows (confirmed via data audit).
+      // Column names verified against actual DB schema:
+      // phone (not customer_phone), total (not grand_total), total_gst (not gst_amount),
+      // delivery_charge (not delivery_fee), manual_discount_type/value (not discount_type/value)
       const { data, error } = await supabase
         .from("orders")
-        .select("*, order_items(*)")
-        .or("order_type.eq.ADVANCE,order_type.eq.advance,is_advance.eq.true,invoice_no.ilike.DEP-%")
+        .select(
+          "id, invoice_no, customer_name, phone, address, status, order_type, is_advance," +
+          " subtotal, total, amount_paid, balance_due, gst_enabled, total_gst, gst_amount," +
+          " discount_amount, manual_discount_amount, manual_discount_type, manual_discount_value," +
+          " delivery_charge, shipping, created_at, items," +
+          " order_items(id, product_name, name, quantity, base_price, line_total)"
+        )
+        .or("order_type.eq.ADVANCE,order_type.eq.advance,is_advance.eq.true")
         .order("created_at", { ascending: false });
 
-      if (seq !== fetchSeqRef.current) return; // Stale fetch response, ignore
-      if (isMutatingRef.current) return; // Mutation in progress, ignore stale fetch
+      if (seq !== fetchSeqRef.current) return; // Stale fetch — discard
+      if (isMutatingRef.current) return;       // Mutation in progress — discard
 
       if (error) {
         console.error("Error loading advance orders:", error);
+        setFetchError(error.message);
         toast.error(`Error loading advance orders: ${error.message}`);
         return;
       }
 
       const normalized = (data || []).map(normalizeOrder);
-      // Completed advance orders STAY on page - do NOT filter them out
       setAdvanceOrders(normalized as any);
     } catch (err: any) {
+      if (seq !== fetchSeqRef.current) return;
       console.error("Error loading advance orders:", err);
-      toast.error(err?.message || "Error loading advance orders");
+      const msg = err?.message || "Error loading advance orders";
+      setFetchError(msg);
+      toast.error(msg);
     } finally {
       if (seq === fetchSeqRef.current) {
         setLoading(false);
@@ -134,7 +181,7 @@ export default function AdminAdvanceOrdersPage() {
 
   const handleStatusChange = async (orderId: string, newStatus: string, o: any) => {
     if (!isUuid(o.id)) {
-      toast.error('Row has no valid UUID');
+      toast.error("Row has no valid UUID");
       return;
     }
 
@@ -156,7 +203,7 @@ export default function AdminAdvanceOrdersPage() {
           .from("orders")
           .update({
             status: newStatus,
-            credit_status: 'outstanding',
+            credit_status: "outstanding",
             amount_paid: newPaid,
             cash_received: newPaid,
             balance_due: newBalance,
@@ -173,20 +220,27 @@ export default function AdminAdvanceOrdersPage() {
 
         // Best effort sync with advance_orders table
         try {
-          const hmStatus = newStatus === 'READY' ? 'ready_for_delivery' : newStatus === 'CANCELLED' ? 'cancelled' : 'pending_deposit';
+          const hmStatus =
+            newStatus === "READY"
+              ? "ready_for_delivery"
+              : newStatus === "CANCELLED"
+              ? "cancelled"
+              : "pending_deposit";
           await supabase
-            .from('advance_orders')
+            .from("advance_orders")
             .update({ status: hmStatus, updated_at: new Date().toISOString() })
             .or(`id.eq.${o.id},deposit_id.eq.${o.invoice_no || o.id}`);
         } catch {}
       }
 
-      // Replace row in state with returned DB row and refresh router
+      // Patch the single row in state — no full refetch needed
       setAdvanceOrders((prev) =>
         prev.map((x) => (x.id === updatedRow.id ? (normalizeOrder(updatedRow) as any) : x))
       );
       router.refresh();
-      toast.success(newStatus === STATUS.COMPLETED ? "Marked as completed" : `Status updated to ${newStatus}`);
+      toast.success(
+        newStatus === STATUS.COMPLETED ? "Marked as completed" : `Status updated to ${newStatus}`
+      );
     } catch (e: any) {
       toast.error(e?.message || String(e));
     } finally {
@@ -197,7 +251,7 @@ export default function AdminAdvanceOrdersPage() {
     }
   };
 
-  // Filter advance orders based on active status filter & search query
+  // ─── Filters ────────────────────────────────────────────────────────────────
   const filteredOrders = useMemo(() => {
     return advanceOrders.filter((a) => {
       if (statusFilter !== "ALL" && (a.status || "").toUpperCase() !== statusFilter) {
@@ -205,7 +259,9 @@ export default function AdminAdvanceOrdersPage() {
       }
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
-        const idMatch = (a.id || "").toLowerCase().includes(q) || (a.invoice_no || a.invoiceNo || "").toLowerCase().includes(q);
+        const idMatch =
+          (a.id || "").toLowerCase().includes(q) ||
+          (a.invoice_no || (a as any).invoiceNo || "").toLowerCase().includes(q);
         const nameMatch = (a.customer_name || "").toLowerCase().includes(q);
         const phoneMatch = (a.phone || a.customer_phone || "").toLowerCase().includes(q);
         return idMatch || nameMatch || phoneMatch;
@@ -215,22 +271,21 @@ export default function AdminAdvanceOrdersPage() {
   }, [advanceOrders, statusFilter, searchQuery]);
 
   const countPending = useMemo(
-    () => filteredOrders.filter((a: AdvanceOrderRecord) => (a.status || "").toUpperCase() === "PENDING").length,
+    () => filteredOrders.filter((a) => (a.status || "").toUpperCase() === "PENDING").length,
     [filteredOrders]
   );
   const countReady = useMemo(
-    () => filteredOrders.filter((a: AdvanceOrderRecord) => (a.status || "").toUpperCase() === "READY").length,
+    () => filteredOrders.filter((a) => (a.status || "").toUpperCase() === "READY").length,
     [filteredOrders]
   );
   const countCompleted = useMemo(
-    () => filteredOrders.filter((a: AdvanceOrderRecord) => (a.status || "").toUpperCase() === "COMPLETED").length,
+    () => filteredOrders.filter((a) => (a.status || "").toUpperCase() === "COMPLETED").length,
     [filteredOrders]
   );
-  const countCancelled = advanceOrders.filter((a: AdvanceOrderRecord) => (a.status || "").toUpperCase() === "CANCELLED").length;
 
   // Real-time Outstanding Balance from active (PENDING / READY) orders only
   const outstandingBalance = useMemo(() => {
-    return filteredOrders.reduce((sum: number, a: AdvanceOrderRecord) => {
+    return filteredOrders.reduce((sum, a) => {
       const st = (a.status || "").toUpperCase();
       if (st === "PENDING" || st === "READY") {
         return sum + getOrderTotals(a).balance;
@@ -239,6 +294,7 @@ export default function AdminAdvanceOrdersPage() {
     }, 0);
   }, [filteredOrders]);
 
+  // ─── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-[#FFF0F8] text-[#111111] font-sans p-4 sm:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -292,58 +348,68 @@ export default function AdminAdvanceOrdersPage() {
           </div>
         </div>
 
-        {/* Top Summary Metric Cards (with real-time decrementing Outstanding Balance) */}
+        {/* Summary Stat Cards — skeleton while loading, real values once data arrives */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs flex justify-between items-center">
-            <div>
-              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
-                Outstanding Balance
-              </p>
-              <p className="text-2xl font-black text-rose-600 mt-1 font-mono">
-                ₹{formatINR(outstandingBalance)}
-              </p>
-              <p className="text-[10px] text-gray-400 mt-0.5">
-                {countPending + countReady} pending / ready orders awaiting balance
-              </p>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center text-rose-600">
-              <IndianRupee className="w-5 h-5" />
-            </div>
-          </div>
+          {loading ? (
+            <>
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+            </>
+          ) : (
+            <>
+              <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs flex justify-between items-center">
+                <div>
+                  <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                    Outstanding Balance
+                  </p>
+                  <p className="text-2xl font-black text-rose-600 mt-1 font-mono">
+                    ₹{formatINR(outstandingBalance)}
+                  </p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">
+                    {countPending + countReady} pending / ready orders awaiting balance
+                  </p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center text-rose-600">
+                  <IndianRupee className="w-5 h-5" />
+                </div>
+              </div>
 
-          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs flex justify-between items-center">
-            <div>
-              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
-                Ready For Collection
-              </p>
-              <p className="text-2xl font-black text-blue-600 mt-1">
-                {countReady}
-              </p>
-              <p className="text-[10px] text-gray-400 mt-0.5">
-                Orders prepared &amp; awaiting pickup
-              </p>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
-              <Clock className="w-5 h-5" />
-            </div>
-          </div>
+              <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs flex justify-between items-center">
+                <div>
+                  <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                    Ready For Collection
+                  </p>
+                  <p className="text-2xl font-black text-blue-600 mt-1">
+                    {countReady}
+                  </p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">
+                    Orders prepared &amp; awaiting pickup
+                  </p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
+                  <Clock className="w-5 h-5" />
+                </div>
+              </div>
 
-          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs flex justify-between items-center">
-            <div>
-              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
-                Completed &amp; Settled
-              </p>
-              <p className="text-2xl font-black text-emerald-600 mt-1">
-                {countCompleted}
-              </p>
-              <p className="text-[10px] text-gray-400 mt-0.5">
-                Flows into Order History &amp; Analytics
-              </p>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
-              <FileText className="w-5 h-5" />
-            </div>
-          </div>
+              <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs flex justify-between items-center">
+                <div>
+                  <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                    Completed &amp; Settled
+                  </p>
+                  <p className="text-2xl font-black text-emerald-600 mt-1">
+                    {countCompleted}
+                  </p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">
+                    Flows into Order History &amp; Analytics
+                  </p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+                  <FileText className="w-5 h-5" />
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Filter and Search Bar */}
@@ -393,15 +459,32 @@ export default function AdminAdvanceOrdersPage() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {loading ? (
+                  /* Skeleton rows — never show empty state while loading */
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <TableRowSkeleton key={i} cols={7} />
+                  ))
+                ) : fetchError ? (
+                  /* Error state with retry */
                   <tr>
-                    <td colSpan={7} className="p-12 text-center text-xs font-semibold text-gray-400">
-                      Loading advance orders...
+                    <td colSpan={7} className="p-12 text-center">
+                      <div className="flex flex-col items-center gap-3">
+                        <AlertCircle className="w-8 h-8 text-red-400" />
+                        <p className="text-sm font-bold text-red-600">Failed to load advance orders</p>
+                        <p className="text-xs text-gray-500 max-w-sm">{fetchError}</p>
+                        <button
+                          onClick={() => loadData()}
+                          className="px-4 py-2 bg-[#F500A0] text-white text-xs font-bold rounded-xl hover:bg-[#D4008A] transition-colors cursor-pointer"
+                        >
+                          Retry
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ) : filteredOrders.length === 0 ? (
+                  /* Empty state — only shown when loading is DONE and result is truly empty */
                   <tr>
                     <td colSpan={7} className="p-12 text-center text-xs font-bold text-gray-500">
-                      No advance orders found matching the filter.
+                      No advance orders match the current filters.
                     </td>
                   </tr>
                 ) : (
@@ -412,7 +495,7 @@ export default function AdminAdvanceOrdersPage() {
                     return (
                       <tr key={a.id} className="hover:bg-gray-50/60 transition-colors">
                         <td className="px-4 py-3 font-mono font-bold text-gray-900">
-                          {a.invoiceNo || a.invoice_no || a.id}
+                          {(a as any).invoiceNo || a.invoice_no || a.id}
                         </td>
                         <td className="px-4 py-3">
                           <div className="font-semibold text-gray-900">
@@ -466,7 +549,7 @@ export default function AdminAdvanceOrdersPage() {
                               </button>
                             )}
                             <Link
-                              href={`/advance/${a.invoiceNo || a.invoice_no || a.id}`}
+                              href={`/advance/${(a as any).invoiceNo || a.invoice_no || a.id}`}
                               className="inline-flex items-center gap-1 px-2.5 py-1 bg-pink-50 hover:bg-pink-100 text-[#F500A0] text-xs font-bold rounded-lg transition-colors"
                             >
                               <FileText className="w-3.5 h-3.5" /> Receipt

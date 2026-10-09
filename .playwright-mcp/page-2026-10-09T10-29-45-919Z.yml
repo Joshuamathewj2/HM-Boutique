@@ -1,0 +1,136 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e57]:
+      - generic [ref=e58]:
+        - generic [ref=e59]:
+          - generic [ref=e60]:
+            - generic [ref=e61]:
+              - img "Love & Happy Unisex Salon Logo" [ref=e63]
+              - generic [ref=e64]:
+                - generic [ref=e65]: Love & Happy
+                - generic [ref=e66]: Unisex Salon
+            - button "Close Menu" [ref=e67] [cursor=pointer]
+          - navigation [ref=e71]:
+            - button "Billing Panel" [ref=e72] [cursor=pointer]
+            - button "Advance Orders" [ref=e76] [cursor=pointer]
+            - button "Order History" [ref=e80] [cursor=pointer]
+            - button "Inventory" [ref=e85] [cursor=pointer]
+            - button "Analytics Dashboard" [ref=e96] [cursor=pointer]
+            - button "Expense Tracker" [ref=e98] [cursor=pointer]
+            - button "Log Out" [ref=e103] [cursor=pointer]
+        - generic [ref=e107]:
+          - generic [ref=e108]: A
+          - generic [ref=e109]:
+            - generic [ref=e110]: Admin Access
+            - generic [ref=e111]: V2.1.0 • PREMIUM POS
+    - main [ref=e112]:
+      - generic [ref=e113]:
+        - heading "Love & Happy Unisex Salon" [level=1] [ref=e116]
+        - generic [ref=e117]:
+          - button "OFFLINE (POS)" [ref=e118] [cursor=pointer]
+          - button "ONLINE ORDER" [ref=e120] [cursor=pointer]
+      - generic [ref=e122]:
+        - generic [ref=e124]:
+          - heading "POS Billing Panel" [level=2] [ref=e125]
+          - paragraph [ref=e127]: Quick invoice generator & database-synced checkout
+        - generic [ref=e128]:
+          - generic [ref=e129]:
+            - generic [ref=e130]:
+              - heading "Customer Details" [level=2] [ref=e131]
+              - generic [ref=e135]:
+                - generic [ref=e136]:
+                  - generic [ref=e137]: Customer Name
+                  - textbox "Walk-in Customer" [ref=e138]
+                - generic [ref=e139]:
+                  - generic [ref=e140]: Mobile Number (WhatsApp)
+                  - textbox "Enter 10-digit number" [ref=e141]
+                - generic [ref=e142]:
+                  - generic [ref=e143]:
+                    - generic [ref=e144]: Bill Date
+                    - generic [ref=e147]: Custom / Past
+                  - textbox [ref=e148] [cursor=pointer]: 2026-10-09
+              - generic [ref=e149]:
+                - generic [ref=e150]: Customer Address (Optional)
+                - textbox "Enter full address" [ref=e151]
+            - generic [ref=e152]:
+              - generic [ref=e153]:
+                - heading "Order Items" [level=2] [ref=e154]
+                - generic [ref=e158]:
+                  - button "Clear Order" [ref=e159] [cursor=pointer]
+                  - button "Add To Catalog" [ref=e163] [cursor=pointer]
+                  - button "Add Custom Item" [ref=e168] [cursor=pointer]
+              - generic [ref=e170]:
+                - generic [ref=e171]:
+                  - generic [ref=e172]: Item Name / Description
+                  - generic [ref=e173]: Price (₹)
+                  - generic [ref=e174]: Qty
+                - generic [ref=e177]:
+                  - generic [ref=e178]:
+                    - combobox "Type custom item name..." [ref=e179]
+                    - button "Catalog" [ref=e180] [cursor=pointer]
+                  - generic [ref=e182]:
+                    - spinbutton "0" [ref=e184]
+                    - generic [ref=e186]:
+                      - button "−" [ref=e187] [cursor=pointer]
+                      - generic [ref=e188]: "1"
+                      - button "+" [ref=e189] [cursor=pointer]
+                    - button "Remove Item" [ref=e191] [cursor=pointer]
+          - generic [ref=e195]:
+            - generic [ref=e196]:
+              - heading "Current Order" [level=2] [ref=e197]
+              - generic [ref=e201]: OFFLINE (POS)
+            - generic [ref=e203]:
+              - generic [ref=e204]:
+                - generic [ref=e205]:
+                  - generic [ref=e206]: SOURCE
+                  - generic [ref=e207]: OFFLINE
+                - generic [ref=e208]:
+                  - generic [ref=e209]: CUSTOMER
+                  - generic [ref=e210]: "-"
+                - generic [ref=e211]:
+                  - generic [ref=e212]: PHONE
+                  - generic [ref=e213]: "-"
+                - generic [ref=e214]: No items added yet
+              - generic [ref=e216]:
+                - generic [ref=e217]:
+                  - generic [ref=e218]: Manual Discount
+                  - generic [ref=e219]:
+                    - combobox [ref=e220] [cursor=pointer]:
+                      - option "₹" [selected]
+                      - option "%"
+                    - spinbutton "0" [ref=e221]
+                - generic [ref=e222]:
+                  - generic [ref=e223]:
+                    - generic [ref=e224]: Subtotal (0 items)
+                    - generic [ref=e225]: ₹0.00
+                  - generic [ref=e226]:
+                    - generic [ref=e227]: Delivery
+                    - spinbutton "0" [ref=e228]
+                  - generic [ref=e230]:
+                    - button "Non-GST Bill" [ref=e231] [cursor=pointer]
+                    - button "GST Invoice" [ref=e232] [cursor=pointer]
+                - generic [ref=e233]:
+                  - generic [ref=e234]: Financial Option
+                  - generic [ref=e235]:
+                    - button "CASH" [ref=e236] [cursor=pointer]
+                    - button "GPay" [ref=e237] [cursor=pointer]
+                    - button "Split" [ref=e238] [cursor=pointer]
+                - generic [ref=e239]:
+                  - generic [ref=e240]: Grand Total
+                  - generic [ref=e241]: ₹0.00
+                - generic [ref=e242]:
+                  - generic [ref=e243]: Cash Payment
+                  - generic [ref=e244]: Amount Received (₹)
+                  - spinbutton "0.00" [ref=e245]
+                - button "Complete Sale" [ref=e246] [cursor=pointer]
+                - button "Save as Advance Order" [ref=e250] [cursor=pointer]
+      - generic [ref=e255]:
+        - generic [ref=e256]: © 2026 All Rights Reserved. Love & Happy Unisex Salon.
+        - generic [ref=e257]:
+          - text: Powered By
+          - link "Cenexa Systems" [ref=e258] [cursor=pointer]:
+            - /url: https://www.cenexasystems.com/
+          - text: "@2026"
+        - generic [ref=e259]: Tailoring • Designer Wear • Alterations • Embroidery
+  - button "Open Next.js Dev Tools" [ref=e12] [cursor=pointer]
+  - alert [ref=e56]
