@@ -93,6 +93,7 @@ import LowStockAlarmModal from "@/app/components/LowStockAlarmModal";
 import OverdueTaskAlarmModal from "@/app/components/OverdueTaskAlarmModal";
 import StockAdjustmentModal from "@/app/components/StockAdjustmentModal";
 import InvoiceModal from "@/app/components/InvoiceModal";
+import PrintSettingsModal from "@/app/components/PrintSettingsModal";
 import { checkCoupon, adjustProductStock, seedCatalog } from "@/app/pos/actions";
 import { BRAND_EN, BRAND_ADDRESS, BRAND_PHONE_DISPLAY, BRAND_LOGO, DEFAULT_SHOP_PROFILE } from "@/lib/brand";
 import { calculateTaxAndTotals, formatINR } from "@/lib/money";
@@ -847,6 +848,51 @@ export default function POSBilling() {
     deposit: number;
     balance: number;
   } | null>(null);
+
+  const orderToPrint = useMemo(() => {
+    if (!printModalData) return null;
+    const cleanId = String(printModalData.id).replace(/^#/, "");
+    if (printModalData.type === "advance") {
+      if (advanceReceipt && (advanceReceipt.id === printModalData.id || advanceReceipt.id === cleanId)) {
+        return normalizeOrder({
+          id: advanceReceipt.id,
+          customer_name: advanceReceipt.customerName,
+          customer_phone: advanceReceipt.customerPhone,
+          total_amount: advanceReceipt.total,
+          deposit_amount: advanceReceipt.deposit,
+          is_advance: true,
+          status: "pending_deposit",
+          items: [],
+        });
+      }
+      if (selectedAdvance && (selectedAdvance.id === printModalData.id || selectedAdvance.id === cleanId)) {
+        return normalizeOrder(selectedAdvance);
+      }
+      const adv = advanceOrders.find(
+        (a) =>
+          a.id === printModalData.id ||
+          a.id === cleanId ||
+          (a as any).deposit_id === printModalData.id ||
+          (a as any).deposit_id === cleanId
+      );
+      if (adv) return normalizeOrder(adv);
+      return normalizeOrder({ id: printModalData.id, is_advance: true });
+    }
+    if (completedBillData && (completedBillData.id === printModalData.id || completedBillData.id === cleanId)) {
+      return normalizeOrder(completedBillData);
+    }
+    const ord = orders.find(
+      (o) =>
+        o.id === printModalData.id ||
+        o.id === cleanId ||
+        o.invoiceNo === printModalData.id ||
+        o.invoiceNo === cleanId ||
+        o.invoice_no === printModalData.id ||
+        o.invoice_no === cleanId
+    );
+    if (ord) return normalizeOrder(ord);
+    return normalizeOrder({ id: printModalData.id });
+  }, [printModalData, advanceReceipt, selectedAdvance, advanceOrders, completedBillData, orders]);
   const [expandedProductId, setExpandedProductId] = useState<string | null>(
     null,
   );
@@ -8345,80 +8391,12 @@ export default function POSBilling() {
           </div>
         )}
 
-        {printModalData && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[500] flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transform scale-100 animate-in zoom-in-95 duration-200">
-              <div className="bg-neutral-900 px-5 py-4 flex items-center justify-between border-b border-neutral-800">
-                <h3 className="font-bold text-white text-sm uppercase tracking-wider flex items-center gap-2">
-                  <Printer className="w-4 h-4 text-neutral-300" />
-                  Print Settings
-                </h3>
-                <button
-                  onClick={() => setPrintModalData(null)}
-                  className="w-7 h-7 flex items-center justify-center bg-white/10 hover:bg-white/20 text-white rounded transition-colors cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="p-6 space-y-6">
-                <div>
-                  <label className="block text-xs font-black text-black uppercase tracking-wider mb-3">Printer Type</label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      onClick={() => setPrintPrefs({ ...printPrefs, paper: "thermal", size: printPrefs.size === "a4" || printPrefs.size === "a5" ? "80" : printPrefs.size })}
-                      className={`flex flex-col items-center p-3 rounded-xl border-2 transition-all cursor-pointer ${printPrefs.paper === "thermal" ? "border-[#F500A0] bg-[#F500A0]/5 text-[#F500A0]" : "border-neutral-200 hover:border-neutral-300 text-neutral-600"}`}
-                    >
-                      <span className="font-bold text-sm">Thermal Roll</span>
-                    </button>
-                    <button
-                      onClick={() => setPrintPrefs({ ...printPrefs, paper: "a4", size: printPrefs.size === "58" || printPrefs.size === "80" ? "a4" : printPrefs.size })}
-                      className={`flex flex-col items-center p-3 rounded-xl border-2 transition-all cursor-pointer ${printPrefs.paper === "a4" ? "border-[#F500A0] bg-[#F500A0]/5 text-[#F500A0]" : "border-neutral-200 hover:border-neutral-300 text-neutral-600"}`}
-                    >
-                      <span className="font-bold text-sm">Sheet (A4/A5)</span>
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-black text-black uppercase tracking-wider mb-3">Paper Size</label>
-                  <div className="grid grid-cols-2 gap-3">
-                    {printPrefs.paper === "thermal" ? (
-                      <>
-                        <button onClick={() => setPrintPrefs({ ...printPrefs, size: "58" })} className={`py-2 rounded-lg border-2 font-bold text-xs transition-all cursor-pointer ${printPrefs.size === "58" ? "border-[#F500A0] bg-[#F500A0]/5 text-[#F500A0]" : "border-neutral-200 hover:border-neutral-300 text-neutral-600"}`}>58 mm</button>
-                        <button onClick={() => setPrintPrefs({ ...printPrefs, size: "80" })} className={`py-2 rounded-lg border-2 font-bold text-xs transition-all cursor-pointer ${printPrefs.size === "80" ? "border-[#F500A0] bg-[#F500A0]/5 text-[#F500A0]" : "border-neutral-200 hover:border-neutral-300 text-neutral-600"}`}>80 mm</button>
-                      </>
-                    ) : (
-                      <>
-                        <button onClick={() => setPrintPrefs({ ...printPrefs, size: "a4" })} className={`py-2 rounded-lg border-2 font-bold text-xs transition-all cursor-pointer ${printPrefs.size === "a4" ? "border-[#F500A0] bg-[#F500A0]/5 text-[#F500A0]" : "border-neutral-200 hover:border-neutral-300 text-neutral-600"}`}>A4 Sheet</button>
-                        <button onClick={() => setPrintPrefs({ ...printPrefs, size: "a5" })} className={`py-2 rounded-lg border-2 font-bold text-xs transition-all cursor-pointer ${printPrefs.size === "a5" ? "border-[#F500A0] bg-[#F500A0]/5 text-[#F500A0]" : "border-neutral-200 hover:border-neutral-300 text-neutral-600"}`}>A5 Sheet</button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <div className="bg-neutral-50 px-6 py-4 flex justify-end border-t border-neutral-200 gap-3">
-                <button
-                  onClick={() => setPrintModalData(null)}
-                  className="px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider text-neutral-600 hover:bg-neutral-200 transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    localStorage.setItem("hm_boutique_print_prefs", JSON.stringify(printPrefs));
-                    const baseUrl = printModalData.type === "invoice" ? `/invoice/${printModalData.id}` : `/advance/${printModalData.id}`;
-                    window.open(`${baseUrl}?print=true&paper=${printPrefs.paper}&size=${printPrefs.size}`, "_blank");
-                    setPrintModalData(null);
-                  }}
-                  className="px-6 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider bg-[#F500A0] hover:bg-[#D4008A] text-white shadow-md transition-all cursor-pointer flex items-center gap-2"
-                >
-                  <Printer className="w-4 h-4" />
-                  Print Now
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Shared Print Settings Modal */}
+        <PrintSettingsModal
+          isOpen={Boolean(printModalData)}
+          onClose={() => setPrintModalData(null)}
+          order={orderToPrint}
+        />
 
                 <StockAdjustmentModal
           isOpen={!!adjustProduct}

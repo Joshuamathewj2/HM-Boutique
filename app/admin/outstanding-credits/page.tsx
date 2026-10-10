@@ -21,6 +21,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { BRAND_EN } from "@/lib/brand";
 import InvoiceModal from "@/app/components/InvoiceModal";
 import PrintableReceipt from "@/app/components/PrintableReceipt";
+import PrintSettingsModal from "@/app/components/PrintSettingsModal";
 import { ORDER_STATUS, CREDIT_STATUS, STATUS } from "@/lib/orderStatus";
 import { formatINR } from "@/lib/money";
 import { normalizeOrder, waLink, formatDDMMYYYY } from "@/lib/normalizeOrder";
@@ -102,16 +103,6 @@ export default function AdminOutstandingCreditsPage() {
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState<boolean>(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [printOrder, setPrintOrder] = useState<any | null>(null);
-
-  useEffect(() => {
-    if (printOrder) {
-      const t = setTimeout(() => {
-        window.print();
-        setPrintOrder(null);
-      }, 150);
-      return () => clearTimeout(t);
-    }
-  }, [printOrder]);
 
   // Fetch live credit orders directly from Supabase
   const fetchCreditOrders = useCallback(async (isRefresh = false) => {
@@ -729,11 +720,12 @@ export default function AdminOutstandingCreditsPage() {
           />
         )}
 
-        {/* Print Root Portal Mount */}
-        {printOrder &&
-          typeof document !== "undefined" &&
-          document.getElementById("print-root") &&
-          createPortal(<PrintableReceipt order={printOrder} />, document.getElementById("print-root")!)}
+        {/* Print Settings Modal */}
+        <PrintSettingsModal
+          isOpen={!!printOrder}
+          onClose={() => setPrintOrder(null)}
+          order={printOrder}
+        />
 
         {/* Footer */}
         <div className="pt-4 text-center text-[10px] text-gray-400">
