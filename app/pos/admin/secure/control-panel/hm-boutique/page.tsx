@@ -5426,7 +5426,9 @@ export default function POSBilling() {
                       <div>
                         <select
                           value={a.status}
+                          disabled={a.status === "COMPLETED"}
                           onChange={async (e) => {
+                            if (a.status === "COMPLETED") return; // frozen: Completed is final
                             const next = e.target.value as AdvanceOrderStatus;
                             if (next === "COMPLETED") {
                               const totals = calculateOrderTotals(a);
@@ -5476,7 +5478,7 @@ export default function POSBilling() {
                               alert("Could not update the order status.");
                             }
                           }}
-                          className={`w-full text-[10px] font-black uppercase tracking-wider border rounded-lg px-2 py-1.5 cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#F500A0]/30 transition-colors ${
+                          className={`w-full text-[10px] font-black uppercase tracking-wider border rounded-lg px-2 py-1.5 ${a.status === "COMPLETED" ? "cursor-not-allowed appearance-none opacity-100" : "cursor-pointer"} focus:outline-none focus:ring-2 focus:ring-[#F500A0]/30 transition-colors ${
                             a.status === "PENDING" ? "bg-[#FEF3C7] text-[#78350F] border-[#F59E0B]/40" :
                             a.status === "READY" ? "bg-[#DBEAFE] text-[#1E3A8A] border-[#2563EB]/40" :
                             a.status === "COMPLETED" ? "bg-[#DCFCE7] text-[#166534] border-[#16A34A]/40" :

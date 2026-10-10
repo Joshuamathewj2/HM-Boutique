@@ -214,6 +214,15 @@ export async function createAdvanceOrder(payload: {
 }
 
 export async function setAdvanceOrderStatus(id: string, status: AdvanceOrderStatus): Promise<void> {
+  // Freeze: a Completed order can never move to another status (COMPLETED -> COMPLETED stays allowed).
+  if (status !== 'COMPLETED' && isSupabaseConfigured) {
+    const isUuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    const q = supabase.from('advance_orders').select('status');
+    const { data } = await (isUuidLike ? q.or(`id.eq.${id},deposit_id.eq.${id}`) : q.eq('deposit_id', id)).limit(1);
+    if (String(data?.[0]?.status || '').toLowerCase() === 'completed') {
+      throw new Error('Completed orders are locked and cannot be changed.');
+    }
+  }
   return await dbStore.updateAdvanceOrderStatus(id, status);
 }
 
