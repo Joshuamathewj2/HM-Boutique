@@ -117,12 +117,12 @@ export default function PrintableReceipt({ order, paper, size }: PrintableReceip
 
   if (paper === "thermal") {
     return (
-      <div className={`invoice-sheet bg-white mx-auto text-black font-mono leading-tight p-3 ${size === "58" ? "w-[260px]" : "w-[320px]"} print:border-none print:shadow-none print:p-0 print:m-0`}>
+      <div className={`invoice-sheet bg-white mx-auto text-black font-mono leading-tight ${size === "58" ? "w-[58mm] max-w-[58mm] p-2" : "w-[80mm] max-w-[80mm] p-3"} print:border-none print:shadow-none print:p-2 print:m-0`}>
         <style>{`
           @media print {
             @page {
               size: ${size === "58" ? "58mm auto" : "80mm auto"};
-              margin: 3mm;
+              margin: 0;
             }
             html, body {
               background: #ffffff !important;
@@ -132,15 +132,15 @@ export default function PrintableReceipt({ order, paper, size }: PrintableReceip
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
             }
-            .no-print, .print-hidden {
+            .no-print, .print-hidden, .print\:hidden {
               display: none !important;
             }
             .invoice-sheet {
               border: none !important;
               box-shadow: none !important;
               max-width: ${size === "58" ? "58mm" : "80mm"} !important;
-              width: 100% !important;
-              padding: 0 !important;
+              width: ${size === "58" ? "58mm" : "80mm"} !important;
+              padding: 2mm 3mm !important;
               margin: 0 auto !important;
             }
           }
@@ -225,10 +225,35 @@ export default function PrintableReceipt({ order, paper, size }: PrintableReceip
             <span>₹{totals.grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
           </div>
         </div>
+
+        {/* Payment & Balance breakdown for Advance and Credit */}
+        {(isCredit || isAdvance) && (
+          <div className="text-[11px] py-2 border-b border-dashed border-black/40 mb-3 space-y-1">
+            <div className="flex justify-between">
+              <span>{isCredit ? (isSettled ? "Amount Paid:" : "Paid:") : (isSettled ? "Amount Paid:" : "Cash Received:")}</span>
+              <span className="font-bold">₹{totals.paid.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Balance Due:</span>
+              <span className={`font-bold ${totals.balance === 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                ₹{totals.balance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+          </div>
+        )}
+
         <div className="text-[10px] space-y-1 mb-3">
           <p className="font-semibold text-center border-b border-dashed border-black/20 pb-2 mb-2">{paymentLabel}</p>
           <p className="text-[9px] uppercase tracking-wider text-center text-gray-700">{numberToWords(totals.grandTotal)}</p>
         </div>
+
+        {/* Terms & Notes for Thermal */}
+        <div className="text-[9px] text-gray-700 space-y-0.5 mb-2 text-left border-t border-dashed border-black/20 pt-2">
+          <p className="font-semibold text-black">Terms &amp; Notes:</p>
+          <p>• Goods once sold can only be exchanged within 7 days.</p>
+          <p>• Custom-stitched garments are non-returnable.</p>
+        </div>
+
         <div className="text-[11px] text-center pt-2 font-semibold italic">
           Thank you for your business!
         </div>
@@ -241,8 +266,8 @@ export default function PrintableReceipt({ order, paper, size }: PrintableReceip
       <style>{`
         @media print {
           @page {
-            size: A4 portrait;
-            margin: 12mm;
+            size: ${size === "a5" ? "A5 portrait" : "A4 portrait"};
+            margin: 10mm;
           }
           html, body {
             background: #ffffff !important;
@@ -252,7 +277,7 @@ export default function PrintableReceipt({ order, paper, size }: PrintableReceip
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
-          .no-print {
+          .no-print, .print-hidden, .print\:hidden {
             display: none !important;
           }
         }

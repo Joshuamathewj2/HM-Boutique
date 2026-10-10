@@ -5,6 +5,7 @@ import { X, Printer, FileText, ArrowLeft, Loader2, ExternalLink } from "lucide-r
 import { fetchOrderById } from "@/app/pos/actions";
 import PrintableReceipt from "./PrintableReceipt";
 import { normalizeOrder } from "@/lib/normalizeOrder";
+import PrintSettingsModal from "./PrintSettingsModal";
 
 export interface InvoiceModalProps {
   isOpen: boolean;
@@ -22,6 +23,7 @@ export default function InvoiceModal({
   const [order, setOrder] = useState<any | null>(invoiceData || null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPrintSettings, setShowPrintSettings] = useState(false);
   const receiptRef = useRef<HTMLDivElement>(null);
 
   // Sync or fetch order data
@@ -29,6 +31,7 @@ export default function InvoiceModal({
     if (!isOpen) {
       setOrder(null);
       setError(null);
+      setShowPrintSettings(false);
       return;
     }
 
@@ -65,7 +68,7 @@ export default function InvoiceModal({
   if (!isOpen) return null;
 
   const handlePrint = () => {
-    window.print();
+    setShowPrintSettings(true);
   };
 
   const rawId = order?.invoice_no || order?.invoiceNo || order?.id || invoiceId || "—";
@@ -178,6 +181,12 @@ export default function InvoiceModal({
           )}
         </div>
       </div>
+
+      <PrintSettingsModal
+        isOpen={showPrintSettings}
+        onClose={() => setShowPrintSettings(false)}
+        order={normalizedOrder}
+      />
     </div>
   );
 }

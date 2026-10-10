@@ -102,12 +102,23 @@ input[type="number"] {
 }
 
 /* ── PRINT STYLES — A4 & Thermal Invoices ─────────────────────────── */
-@page {
-  size: A4 portrait;
-  margin: 12mm;
-}
-
 @media print {
+  /* Strict Isolation: hide every direct child of body except #print-root */
+  body.printing-isolated > *:not(#print-root) {
+    display: none !important;
+  }
+
+  body.printing-isolated #print-root {
+    display: block !important;
+    position: static !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
   .no-print,
   .print-hidden,
   .print\:hidden {
@@ -117,6 +128,8 @@ input[type="number"] {
   html, body {
     background: #ffffff !important;
     color: #000000 !important;
+    height: auto !important;
+    overflow: visible !important;
   }
 
   * {
@@ -124,4 +137,5 @@ input[type="number"] {
     print-color-adjust: exact !important;
   }
 }
+
 
