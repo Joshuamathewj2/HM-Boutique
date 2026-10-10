@@ -3,7 +3,7 @@ import { ArrowLeft, FileText } from "lucide-react";
 import Link from "next/link";
 import { InvoiceActions } from "./InvoiceActions";
 import { getOrderTotals, numberToWords } from "@/lib/orderTotals";
-import InvoiceTotalsBlock from "@/app/components/InvoiceTotalsBlock";
+import PrintableReceipt from "@/app/components/PrintableReceipt";
 
 export const dynamic = "force-dynamic";
 
@@ -20,8 +20,8 @@ export default async function InvoicePage({
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const isEmbed = resolvedSearchParams.embed === "true";
   const isPrint = resolvedSearchParams.print === "true";
-  const paper = resolvedSearchParams.paper || "a4";
-  const size = resolvedSearchParams.size || "a4";
+  const paper = typeof resolvedSearchParams.paper === "string" ? resolvedSearchParams.paper : "a4";
+  const size = typeof resolvedSearchParams.size === "string" ? resolvedSearchParams.size : "a4";
 
   const order = await dbStore.getOrderWithRelations(id);
 
