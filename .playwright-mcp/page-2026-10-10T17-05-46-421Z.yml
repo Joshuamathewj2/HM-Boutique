@@ -1,0 +1,68 @@
+- generic [active] [ref=f7e1]:
+  - generic [ref=f7e2]:
+    - generic [ref=f7e4]:
+      - link "Return to POS" [ref=f7e5] [cursor=pointer]:
+        - /url: /pos/admin/secure/control-panel/hm-boutique
+      - generic [ref=f7e9]:
+        - button "Share WhatsApp" [ref=f7e10] [cursor=pointer]
+        - button "Print" [ref=f7e14] [cursor=pointer]
+    - generic [ref=f7e20]:
+      - generic [ref=f7e21]:
+        - generic [ref=f7e22]:
+          - heading "HM School of Fashion Designing and Tailoring" [level=1] [ref=f7e23]
+          - paragraph [ref=f7e24]: "No: 82, Mahalakshmi Nagar, 2nd Main Road, Adambakkam, Chennai - 600088"
+          - paragraph [ref=f7e25]: "Phone: +91 80560 86113 • Email: malinisuresh6612@gmail.com"
+        - generic [ref=f7e26]:
+          - generic [ref=f7e27]: ADVANCE RECEIPT
+          - paragraph [ref=f7e28]: "#INV-20261010-6652"
+          - paragraph [ref=f7e29]: 10 Oct 2026
+          - paragraph [ref=f7e30]: "Mode: CASH"
+      - generic [ref=f7e31]:
+        - generic [ref=f7e32]:
+          - generic [ref=f7e33]: BILLED TO
+          - generic [ref=f7e34]: sdad
+          - generic [ref=f7e35]: +91 1323312323
+        - generic [ref=f7e36]:
+          - generic [ref=f7e37]: PLACE OF SUPPLY
+          - generic [ref=f7e38]: Tamil Nadu (33)
+      - table [ref=f7e40]:
+        - rowgroup [ref=f7e41]:
+          - row [ref=f7e42]:
+            - columnheader "#" [ref=f7e43]
+            - columnheader "Item Description" [ref=f7e44]
+            - columnheader "Qty" [ref=f7e45]
+            - columnheader "Rate (₹)" [ref=f7e46]
+            - columnheader "Total (₹)" [ref=f7e47]
+        - rowgroup [ref=f7e48]:
+          - row [ref=f7e49]:
+            - cell "1" [ref=f7e50]
+            - cell "'I' Neck Blouse" [ref=f7e51]
+            - cell "1" [ref=f7e53]
+            - cell "₹10,000.00" [ref=f7e54]
+            - cell "₹10,000.00" [ref=f7e55]
+      - generic [ref=f7e56]:
+        - generic [ref=f7e57]:
+          - generic [ref=f7e58]:
+            - generic [ref=f7e59]: AMOUNT IN WORDS
+            - generic [ref=f7e60]: Ten Thousand Rupees Only
+          - generic [ref=f7e61]:
+            - generic [ref=f7e62]:
+              - text: "Cash Received:"
+              - generic [ref=f7e63]: ₹64.00
+            - generic [ref=f7e64]:
+              - text: "Balance Due:"
+              - generic [ref=f7e65]: ₹9,936.00
+          - generic [ref=f7e66]:
+            - paragraph [ref=f7e67]: "Terms & Notes:"
+            - paragraph [ref=f7e68]: • Goods once sold can only be exchanged within 7 days with this invoice.
+            - paragraph [ref=f7e69]: • Custom-stitched and altered garments are made to order and non-returnable.
+        - generic [ref=f7e70]:
+          - generic [ref=f7e71]:
+            - generic [ref=f7e72]: Subtotal
+            - generic [ref=f7e73]: ₹10,000.00
+          - generic [ref=f7e74]:
+            - generic [ref=f7e75]: TOTAL
+            - generic [ref=f7e76]: ₹10,000.00
+      - generic [ref=f7e77]: Powered by Cenexa Systems © 2026
+  - button "Open Next.js Dev Tools" [ref=f7e83] [cursor=pointer]
+  - alert [ref=f7e87]

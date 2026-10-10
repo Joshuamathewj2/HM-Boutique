@@ -1,0 +1,7 @@
+- generic [active] [ref=f5e1]:
+  - generic [ref=f5e2]:
+    - heading "Invoice Not Found" [level=1] [ref=f5e7]
+    - paragraph [ref=f5e8]: "The requested invoice identifier #TEST could not be found."
+    - link "Back to Dashboard" [ref=f5e9] [cursor=pointer]:
+      - /url: /pos/admin/secure/control-panel/hm-boutique
+  - button "Open Next.js Dev Tools" [ref=f5e17] [cursor=pointer]
