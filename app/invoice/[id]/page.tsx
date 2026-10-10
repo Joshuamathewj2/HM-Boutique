@@ -134,8 +134,18 @@ export default async function InvoicePage({
             color: #000000 !important;
             padding: 0 !important;
             margin: 0 !important;
+            width: 100% !important;
+            height: auto !important;
+            min-height: 0 !important;
+            display: block !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
+          }
+          body > div {
+            display: block !important;
+            min-height: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
           }
           .print-hidden {
             display: none !important;
@@ -161,6 +171,7 @@ export default async function InvoicePage({
             grandTotal={totals.grandTotal}
             isGst={totals.gstAmount > 0}
             autoPrint={isPrint}
+            order={order}
           />
         </div>
       )}

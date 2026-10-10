@@ -78,22 +78,44 @@ export default async function AdvanceReceiptPage({
     >
       <style>{`
         @media print {
-          @page { size: A4 portrait; margin: 12mm 10mm; }
+          @page {
+            size: ${
+              paper === "thermal"
+                ? size === "58"
+                  ? "58mm auto"
+                  : "80mm auto"
+                : size === "a5"
+                  ? "A5 portrait"
+                  : "A4 portrait"
+            };
+            margin: ${paper === "thermal" ? "3mm" : size === "a5" ? "10mm" : "12mm"};
+          }
           html, body {
             background: #ffffff !important;
             color: #000000 !important;
             padding: 0 !important;
             margin: 0 !important;
+            width: 100% !important;
+            height: auto !important;
+            min-height: 0 !important;
+            display: block !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
+          }
+          body > div {
+            display: block !important;
+            min-height: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
           }
           .print-hidden { display: none !important; }
           .invoice-sheet {
             border: none !important;
             box-shadow: none !important;
-            max-width: 100% !important;
+            max-width: ${paper === "thermal" ? (size === "58" ? "58mm" : "80mm") : "100%"} !important;
             width: 100% !important;
             padding: 0 !important;
+            margin: 0 auto !important;
           }
         }
       `}</style>
@@ -108,6 +130,7 @@ export default async function AdvanceReceiptPage({
             deposit={totals.paid}
             balance={totals.balance}
             autoPrint={autoPrint}
+            order={advance}
           />
         </div>
       )}
