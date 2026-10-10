@@ -108,35 +108,18 @@ input[type="number"] {
 }
 
 @media print {
-  body * {
-    visibility: hidden;
-  }
-  #print-root,
-  #print-root * {
-    visibility: visible;
-  }
-  #print-root {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-  }
-
+  .no-print,
   .print-hidden,
   .print\:hidden {
     display: none !important;
   }
 
-  #invoice-print-root {
-    width: 100% !important;
-    max-width: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    box-shadow: none !important;
-    border: none !important;
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
   }
 
-  #invoice-print-root * {
+  * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }

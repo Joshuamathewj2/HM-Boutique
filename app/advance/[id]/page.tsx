@@ -3,7 +3,7 @@ import { ArrowLeft, FileText } from "lucide-react";
 import Link from "next/link";
 import { AdvanceReceiptActions } from "./AdvanceReceiptActions";
 import { getOrderTotals, numberToWords } from "@/lib/orderTotals";
-import InvoiceTotalsBlock from "@/app/components/InvoiceTotalsBlock";
+import PrintableReceipt from "@/app/components/PrintableReceipt";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +18,8 @@ export default async function AdvanceReceiptPage({
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const isEmbed = resolvedSearchParams.embed === "true";
   const autoPrint = resolvedSearchParams.print === "true";
+  const paper = typeof resolvedSearchParams.paper === "string" ? resolvedSearchParams.paper : "a4";
+  const size = typeof resolvedSearchParams.size === "string" ? resolvedSearchParams.size : "a4";
 
   const advance = await dbStore.getAdvanceOrder(id);
 
@@ -110,194 +112,7 @@ export default async function AdvanceReceiptPage({
         </div>
       )}
 
-      <div className="invoice-sheet w-full max-w-[760px] bg-white border border-zinc-200/80 shadow-xs rounded-sm p-6 sm:p-12 text-zinc-900 print:border-none print:shadow-none print:p-0 print:rounded-none">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start gap-6 pb-6 border-b border-zinc-200">
-          <div className="flex items-start gap-3.5 sm:gap-4">
-            <div className="w-14 h-14 sm:w-16 sm:h-16 shrink-0 rounded-sm border border-zinc-200 overflow-hidden bg-white p-1">
-              <img
-                src="/logo.png"
-                alt="HM Boutique"
-                className="w-full h-full object-contain"
-              />
-            </div>
-            <div className="space-y-1">
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-zinc-900">
-                HM BOUTIQUE
-              </h1>
-              <p className="text-xs font-semibold text-[#F500A0]">
-                HM School of Fashion Designing and Tailoring
-              </p>
-              <p className="text-xs text-zinc-500 leading-relaxed max-w-xs">
-                No: 82, Mahalakshmi Nagar, 2nd Main Road, Adambakkam, Chennai - 600088
-              </p>
-              <div className="text-xs text-zinc-600 pt-1">
-                <p>Phone: +91 80560 86113</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="sm:text-right space-y-1.5 shrink-0">
-            <div>
-              <span className="text-lg font-bold tracking-tight text-zinc-900 uppercase">
-                {isSettled ? "Invoice" : "Advance Receipt"}
-              </span>
-              <p className="text-xs font-mono text-zinc-500">
-                #{isSettled ? ((advance as any).invoice_number || (advance as any).invoice_no || advance.id || "").replace(/^DEP-/i, "INV-") : ((advance as any).invoice_number || (advance as any).invoice_no || advance.id)}
-              </p>
-            </div>
-            <div className="text-xs text-zinc-600 space-y-0.5 pt-1">
-              <div>
-                <span className="text-zinc-400">Date: </span>
-                <span className="text-zinc-800 font-medium">{formattedDate}</span>
-              </div>
-              <div>
-                <span className="text-zinc-400">Status: </span>
-                <span className="text-zinc-800 font-medium uppercase">
-                  {advance.status}
-                </span>
-              </div>
-              {deliveryDate && (
-                <div>
-                  <span className="text-zinc-400">Delivery: </span>
-                  <span className="text-zinc-700">{deliveryDate}</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Billed To */}
-        <div className="py-5 border-b border-zinc-200 text-xs">
-          <div className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-1">
-            Customer
-          </div>
-          <div className="text-sm font-semibold text-zinc-900">
-            {advance.customer_name?.trim() ? advance.customer_name : "Counter Customer"}
-          </div>
-          {advance.customer_phone && (
-            <div className="text-xs text-zinc-600 font-mono mt-0.5">
-              +91 {advance.customer_phone}
-            </div>
-          )}
-          {advance.customer_address && (
-            <div className="text-xs text-zinc-600 mt-0.5 max-w-[260px]">
-              {advance.customer_address}
-            </div>
-          )}
-        </div>
-
-        {/* Items */}
-        <div className="py-4">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-zinc-200 text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
-                <th className="pb-3 w-8 text-center">#</th>
-                <th className="pb-3">Item Description</th>
-                <th className="pb-3 text-center w-12">Qty</th>
-                <th className="pb-3 text-right w-24">Rate (₹)</th>
-                <th className="pb-3 text-right w-28">Amount (₹)</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-100">
-              {advance.items.map((item, index) => {
-                const unitPrice = Number(item.snapshot_price) || 0;
-                const itemTotal = unitPrice * item.quantity;
-                return (
-                  <tr key={index}>
-                    <td className="py-3 text-center text-zinc-400 font-mono">
-                      {index + 1}
-                    </td>
-                    <td className="py-3">
-                      <div className="font-medium text-zinc-900">
-                        {item.snapshot_name}
-                      </div>
-                      {item.snapshot_desc && (
-                        <div className="text-[10px] text-zinc-500">
-                          {item.snapshot_desc}
-                        </div>
-                      )}
-                    </td>
-                    <td className="py-3 text-center text-zinc-800 font-medium">
-                      {item.quantity}
-                    </td>
-                    <td className="py-3 text-right font-mono text-zinc-600">
-                      {fmt(unitPrice)}
-                    </td>
-                    <td className="py-3 text-right font-mono font-semibold text-zinc-900">
-                      {fmt(itemTotal)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Totals & Breakdown */}
-        <div className="border-t border-zinc-200 pt-4 flex flex-col sm:flex-row justify-between items-start gap-8 text-xs">
-          <div className="space-y-4 max-w-sm flex-1">
-            <div>
-              <div className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-0.5">
-                Amount in Words
-              </div>
-              <div className="text-xs font-semibold italic text-zinc-800">
-                {numberToWords(totals.grandTotal)}
-              </div>
-            </div>
-
-            {/* Payment & Balance lines for advance orders */}
-            <div className="text-xs space-y-1 pt-1">
-              <div>
-                <span className="text-zinc-500">
-                  {isSettled ? "Amount Paid: " : "Deposit Paid: "}
-                </span>
-                <span className="font-bold text-zinc-900 font-mono">
-                  ₹{fmt(totals.paid)}
-                </span>
-              </div>
-              <div>
-                <span className="text-zinc-500">Balance Due: </span>
-                <span
-                  className={`font-bold font-mono ${
-                    totals.balance === 0 ? "text-emerald-600" : "text-rose-600"
-                  }`}
-                >
-                  ₹{fmt(totals.balance)}
-                </span>
-              </div>
-            </div>
-
-            <div className="text-[11px] text-zinc-500 leading-relaxed">
-              <p className="font-medium text-zinc-700 mb-0.5">Please note:</p>
-              <p>• This is an advance-order deposit receipt, not a final tax invoice.</p>
-              <p>• The balance is payable on or before delivery/collection.</p>
-            </div>
-          </div>
-
-          <InvoiceTotalsBlock totals={totals} />
-        </div>
-
-        {advance.notes && (
-          <div className="mt-6 text-xs text-zinc-600">
-            <span className="font-semibold text-zinc-700">Notes: </span>
-            {advance.notes}
-          </div>
-        )}
-
-        <div className="mt-12 pt-6 border-t border-zinc-200 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-6 text-xs">
-          <div className="text-[11px] text-zinc-400">
-            Thank you for your visit! • HM Boutique POS • Powered by Cenexa Systems © 2026
-          </div>
-          <div className="sm:text-right space-y-1 self-end">
-            <div className="border-b border-zinc-300 w-36 mb-1 ml-auto"></div>
-            <div className="font-semibold text-zinc-800 text-xs">
-              Authorised Signatory
-            </div>
-            <div className="text-[10px] text-zinc-400">For HM Boutique</div>
-          </div>
-        </div>
-      </div>
+      <PrintableReceipt order={advance} paper={paper} size={size} />
     </div>
   );
 }

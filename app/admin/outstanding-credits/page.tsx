@@ -346,7 +346,7 @@ export default function AdminOutstandingCreditsPage() {
   }, [creditOrders]);
 
   return (
-    <div className="min-h-screen bg-[#FFF0F8] text-[#111111] font-sans p-4 sm:p-8">
+    <div className="min-h-screen bg-[#FFF0F8] text-[#111111] font-sans p-4 sm:p-8 print:hidden">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-[#F500A0]/20 shadow-xs">

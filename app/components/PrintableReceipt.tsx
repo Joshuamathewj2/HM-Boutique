@@ -49,9 +49,11 @@ export interface PrintableReceiptProps {
     invoiceNo?: string;
     items: PrintableReceiptItem[];
   };
+  paper?: string;
+  size?: string;
 }
 
-export default function PrintableReceipt({ order }: PrintableReceiptProps) {
+export default function PrintableReceipt({ order, paper, size }: PrintableReceiptProps) {
   const totals = getOrderTotals(order);
   const isGst = totals.gstAmount > 0;
 
@@ -93,8 +95,149 @@ export default function PrintableReceipt({ order }: PrintableReceiptProps) {
 
   const displayInvoiceId = (order.invoice_no || order.invoice_number || order.invoiceNo || order.id || "").replace(/^DEP-/i, "INV-");
 
+  const formattedTime = new Date(order.created_at || new Date()).toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const paymentLabel = isCredit
+    ? isSettled
+      ? "CREDIT SETTLED"
+      : "CREDIT SALE"
+    : isAdvance
+      ? isSettled
+        ? "ADVANCE SETTLED"
+        : "ADVANCE RECEIVED"
+      : order.payment_method === "UPI" || order.payment_mode === "UPI"
+        ? "PAID BY UPI / GPAY"
+        : order.payment_method === "CARD" || order.payment_mode === "CARD"
+          ? "PAID BY CARD"
+          : order.payment_method === "SPLIT" || order.payment_mode === "SPLIT"
+            ? "SPLIT PAYMENT"
+            : "PAID BY CASH";
+
+  if (paper === "thermal") {
+    return (
+      <div className={`invoice-sheet bg-white mx-auto text-black font-mono leading-tight p-3 ${size === "58" ? "w-[260px]" : "w-[320px]"} print:border-none print:shadow-none print:p-0 print:m-0`}>
+        <style>{`
+          @media print {
+            @page {
+              size: ${size === "58" ? "58mm auto" : "80mm auto"};
+              margin: 3mm;
+            }
+            html, body {
+              background: #ffffff !important;
+              color: #000000 !important;
+              padding: 0 !important;
+              margin: 0 !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            .no-print, .print-hidden {
+              display: none !important;
+            }
+            .invoice-sheet {
+              border: none !important;
+              box-shadow: none !important;
+              max-width: ${size === "58" ? "58mm" : "80mm"} !important;
+              width: 100% !important;
+              padding: 0 !important;
+              margin: 0 auto !important;
+            }
+          }
+        `}</style>
+        {/* Thermal Receipt Layout */}
+        <div className="text-center pb-3 border-b border-dashed border-black/40 mb-3">
+          <h1 className="text-xl font-bold tracking-tight">HM BOUTIQUE</h1>
+          <p className="text-[11px] mt-1 font-semibold">HM School of Fashion Designing & Tailoring</p>
+          <p className="text-[11px]">No: 82, Mahalakshmi Nagar, 2nd Main Road</p>
+          <p className="text-[11px]">Adambakkam, Chennai - 600088</p>
+          <p className="text-[11px]">Ph: +91 80560 86113</p>
+          <p className="text-[10px]">Email: malinisuresh6612@gmail.com</p>
+          {isGst && <p className="text-[11px] font-bold mt-1">GSTIN: —</p>}
+        </div>
+        <div className="text-[11px] pb-3 border-b border-dashed border-black/40 mb-3 space-y-1">
+          <div className="flex justify-between">
+            <span className="font-bold">{title}</span>
+            <span>#{displayInvoiceId}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Date:</span>
+            <span>{formattedDate} {formattedTime}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Customer:</span>
+            <span className="font-semibold text-right">{order.customer_name || "Counter Sale"}</span>
+          </div>
+        </div>
+        <div className="text-[11px] w-full">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-dashed border-black/40">
+                <th className="py-1 font-bold">Item</th>
+                <th className="py-1 font-bold text-center">Qty</th>
+                <th className="py-1 font-bold text-right">Amt</th>
+              </tr>
+            </thead>
+            <tbody className="align-top">
+              {order.items.map((item, i) => (
+                <tr key={i} className="border-b border-dashed border-black/15">
+                  <td className="py-1.5 pr-1">
+                    <div className="font-semibold">{item.snapshot_name}</div>
+                  </td>
+                  <td className="py-1.5 text-center">{item.quantity}</td>
+                  <td className="py-1.5 text-right font-medium">{(item.quantity * Number(item.snapshot_price)).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="text-[11px] py-3 border-b border-dashed border-black/40 mb-3 space-y-1.5">
+          <div className="flex justify-between">
+            <span>Subtotal:</span>
+            <span>{totals.subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+          </div>
+          {totals.discount > 0 && (
+            <div className="flex justify-between text-black">
+              <span>Discount:</span>
+              <span>-{totals.discount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+            </div>
+          )}
+          {totals.gstAmount > 0 && (
+            <>
+              <div className="flex justify-between">
+                <span>CGST @ {(totals.gstPercent / 2)}%:</span>
+                <span>+{totals.cgst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>SGST @ {(totals.gstPercent / 2)}%:</span>
+                <span>+{totals.sgst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+              </div>
+            </>
+          )}
+          {totals.deliveryFee > 0 && (
+            <div className="flex justify-between">
+              <span>Delivery:</span>
+              <span>{totals.deliveryFee.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+            </div>
+          )}
+          <div className="flex justify-between text-[14px] font-black mt-2 pt-1 border-t border-dashed border-black/40">
+            <span>{totals.gstAmount > 0 ? "TOTAL (incl. GST):" : "TOTAL:"}</span>
+            <span>₹{totals.grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+          </div>
+        </div>
+        <div className="text-[10px] space-y-1 mb-3">
+          <p className="font-semibold text-center border-b border-dashed border-black/20 pb-2 mb-2">{paymentLabel}</p>
+          <p className="text-[9px] uppercase tracking-wider text-center text-gray-700">{numberToWords(totals.grandTotal)}</p>
+        </div>
+        <div className="text-[11px] text-center pt-2 font-semibold italic">
+          Thank you for your business!
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="w-full max-w-[210mm] mx-auto bg-white p-8 font-sans text-black border border-zinc-200 rounded-lg print:border-none print:p-0 print:m-0 print:max-w-none">
+    <div className="invoice-sheet w-full max-w-[210mm] mx-auto bg-white p-8 font-sans text-black border border-zinc-200 rounded-lg print:border-none print:p-0 print:m-0 print:max-w-none">
       <style>{`
         @media print {
           @page {

@@ -25,10 +25,40 @@ export function InvoiceActions({
 
   useEffect(() => {
     if (autoPrint && typeof window !== "undefined") {
-      const timer = setTimeout(() => {
-        window.print();
-      }, 500);
-      return () => clearTimeout(timer);
+      let isMounted = true;
+      const doPrint = async () => {
+        try {
+          if (document.fonts) await document.fonts.ready;
+          const images = Array.from(document.images);
+          await Promise.all(images.map(img => {
+            if (img.complete) return Promise.resolve();
+            return new Promise(resolve => {
+              img.onload = resolve;
+              img.onerror = resolve;
+            });
+          }));
+        } catch (e) {}
+
+        if (!isMounted) return;
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            window.print();
+          });
+        });
+      };
+
+      doPrint();
+
+      const onAfterPrint = () => {
+        // Close the tab after printing if opened via autoPrint
+        window.close();
+      };
+      window.addEventListener("afterprint", onAfterPrint);
+
+      return () => {
+        isMounted = false;
+        window.removeEventListener("afterprint", onAfterPrint);
+      };
     }
   }, [autoPrint]);
 
@@ -46,22 +76,6 @@ export function InvoiceActions({
     }
   };
 
-  const handleWhatsAppShare = () => {
-    if (typeof window !== "undefined") {
-      const currentUrl = window.location.href;
-      const invoiceType = isGst ? "Tax Invoice" : "Invoice";
-      const text = `*HM BOUTIQUE*\n${invoiceType} #${orderId}\nCustomer: ${customerName || "Counter Sale"}\nTotal: ₹${grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}\n\nInvoice Link:\n${currentUrl}`;
-      const encoded = encodeURIComponent(text);
-      const cleanPhone = (customerPhone || "").replace(/\D/g, "").slice(-10);
-
-      const url = cleanPhone
-        ? `https://api.whatsapp.com/send?phone=91${cleanPhone}&text=${encoded}`
-        : `https://api.whatsapp.com/send?text=${encoded}`;
-
-      window.open(url, "_blank");
-    }
-  };
-
   return (
     <div className="w-full flex flex-wrap items-center justify-between gap-3 bg-white border border-zinc-200/80 rounded-sm p-3 shadow-xs print:hidden">
       {/* Return to POS */}
@@ -75,17 +89,6 @@ export function InvoiceActions({
 
       {/* Action Buttons (Clean, Normal, Monochrome) */}
       <div className="flex flex-wrap items-center gap-2">
-        {/* WhatsApp Share */}
-        <button
-          onClick={handleWhatsAppShare}
-          type="button"
-          title="Share invoice on WhatsApp"
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-800 hover:text-zinc-950 px-3 py-1.5 rounded-sm bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 transition-colors cursor-pointer"
-        >
-          <MessageCircle className="w-3.5 h-3.5 text-zinc-600" />
-          <span>Share WhatsApp</span>
-        </button>
-
         {/* Copy Link */}
         <button
           onClick={handleCopyLink}

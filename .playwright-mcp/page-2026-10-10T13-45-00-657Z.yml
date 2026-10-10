@@ -1,0 +1,16 @@
+- generic [ref=f2e1]:
+  - generic [ref=f2e2]:
+    - generic [ref=f2e6]:
+      - img "HM Boutique Logo" [ref=f2e11]
+      - heading "HM BOUTIQUE" [level=1] [ref=f2e12]
+      - paragraph [ref=f2e13]: Boutique POS Terminal • School of Fashion Designing & Tailoring
+      - generic [ref=f2e14]:
+        - generic [ref=f2e15]:
+          - text: Security Passcode
+          - generic [ref=f2e16]:
+            - textbox "••••••••" [active] [ref=f2e21]
+            - button [ref=f2e22] [cursor=pointer]
+        - button "Authenticate" [ref=f2e26] [cursor=pointer]
+      - generic [ref=f2e29]: SYSTEM ONLINE • ENCRYPTED
+    - generic [ref=f2e32]: HM BOUTIQUE Terminal v1.0
+  - alert [ref=f2e33]

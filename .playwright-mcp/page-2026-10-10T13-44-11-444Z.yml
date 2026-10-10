@@ -1,0 +1,84 @@
+- generic [active] [ref=f1e1]:
+  - generic [ref=f1e2]:
+    - generic [ref=f1e4]:
+      - link "Return to POS" [ref=f1e5] [cursor=pointer]:
+        - /url: /pos/admin/secure/control-panel/hm-boutique
+      - generic [ref=f1e9]:
+        - button "Share WhatsApp" [ref=f1e10] [cursor=pointer]
+        - button "Copy Link" [ref=f1e14] [cursor=pointer]
+        - button "Print" [ref=f1e19] [cursor=pointer]
+    - generic [ref=f1e25]:
+      - generic [ref=f1e26]:
+        - generic [ref=f1e27]:
+          - img "HM Boutique" [ref=f1e29]
+          - generic [ref=f1e30]:
+            - heading "HM BOUTIQUE" [level=1] [ref=f1e31]
+            - paragraph [ref=f1e32]: HM School of Fashion Designing and Tailoring
+            - paragraph [ref=f1e33]: "No: 82, Mahalakshmi Nagar, 2nd Main Road, Adambakkam, Chennai - 600088"
+            - generic [ref=f1e34]:
+              - paragraph [ref=f1e35]: "Phone: +91 80560 86113"
+              - paragraph [ref=f1e36]: "Email: malinisuresh6612@gmail.com"
+        - generic [ref=f1e37]:
+          - generic [ref=f1e38]:
+            - text: Invoice
+            - paragraph [ref=f1e39]: "#INV-2026-OW8PF"
+          - generic [ref=f1e40]:
+            - generic [ref=f1e41]: "Date: 10 Oct 2026"
+            - generic [ref=f1e42]: "Time: 07:06 pm"
+            - generic [ref=f1e43]:
+              - text: "Payment:"
+              - generic [ref=f1e44]: Cash • COMPLETED
+            - generic [ref=f1e45]: "Channel: OFFLINE"
+      - generic [ref=f1e46]:
+        - generic [ref=f1e47]:
+          - generic [ref=f1e48]: Billed To
+          - generic [ref=f1e49]: test
+          - generic [ref=f1e50]: +91 8925306434
+          - generic [ref=f1e51]: tesrt
+        - generic [ref=f1e52]:
+          - generic [ref=f1e53]: Place of Supply
+          - generic [ref=f1e54]: Tamil Nadu (33)
+      - table [ref=f1e56]:
+        - rowgroup [ref=f1e57]:
+          - row [ref=f1e58]:
+            - columnheader "#" [ref=f1e59]
+            - columnheader "Item Description" [ref=f1e60]
+            - columnheader "Qty" [ref=f1e61]
+            - columnheader "Rate (₹)" [ref=f1e62]
+            - columnheader "Amount (₹)" [ref=f1e63]
+        - rowgroup [ref=f1e64]:
+          - row [ref=f1e65]:
+            - cell "1" [ref=f1e66]
+            - cell "'I' Neck Blouse" [ref=f1e67]
+            - cell "1" [ref=f1e69]
+            - cell "10,000.00" [ref=f1e70]
+            - cell "10,000.00" [ref=f1e71]
+      - generic [ref=f1e72]:
+        - generic [ref=f1e73]:
+          - generic [ref=f1e74]:
+            - generic [ref=f1e75]: Amount in Words
+            - generic [ref=f1e76]: Ten Thousand Rupees Only
+          - generic [ref=f1e77]:
+            - generic [ref=f1e78]:
+              - text: "Amount Paid / Received:"
+              - generic [ref=f1e79]: ₹10,000.00
+            - generic [ref=f1e80]:
+              - text: "Balance Due:"
+              - generic [ref=f1e81]: ₹0.00
+          - generic [ref=f1e82]:
+            - paragraph [ref=f1e83]: "Terms & Notes:"
+            - paragraph [ref=f1e84]: • Goods once sold can only be exchanged within 7 days with this invoice.
+            - paragraph [ref=f1e85]: • Custom-stitched and altered garments are made to order and are non-returnable.
+        - generic [ref=f1e86]:
+          - generic [ref=f1e87]:
+            - generic [ref=f1e88]: Subtotal
+            - generic [ref=f1e89]: ₹10,000.00
+          - generic [ref=f1e90]:
+            - generic [ref=f1e91]: TOTAL
+            - generic [ref=f1e92]: ₹10,000.00
+      - generic [ref=f1e93]:
+        - generic [ref=f1e94]: Thank you for your visit! • HM Boutique POS • Powered by Cenexa Systems © 2026
+        - generic [ref=f1e95]:
+          - generic [ref=f1e97]: Authorised Signatory
+          - generic [ref=f1e98]: For HM Boutique
+  - alert [ref=f1e99]

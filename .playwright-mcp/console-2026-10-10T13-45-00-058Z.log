@@ -1,0 +1,2 @@
+[     587ms] [VERBOSE] [DOM] Password forms should have (optionally hidden) username fields for accessibility: (More info: https://goo.gl/9p2vKq) %o @ https://hm-boutique.vercel.app/pos/admin/secure/control-panel/hm-boutique:0
+[     664ms] [INFO] Banner not shown: beforeinstallpromptevent.preventDefault() called. The page must call beforeinstallpromptevent.prompt() to show the banner. @ https://hm-boutique.vercel.app/pos/admin/secure/control-panel/hm-boutique:0

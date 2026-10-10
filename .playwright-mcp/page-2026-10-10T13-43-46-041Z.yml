@@ -1,0 +1,7 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - heading "Invoice Not Found" [level=1] [ref=e7]
+    - paragraph [ref=e8]: "The requested invoice identifier #65edc51f-d595-4074-9945-dd1f32be656e could not be found."
+    - link "Back to Dashboard" [ref=e9] [cursor=pointer]:
+      - /url: /pos/admin/secure/control-panel/hm-boutique
+  - alert [ref=e12]

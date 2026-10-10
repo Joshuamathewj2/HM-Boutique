@@ -25,8 +25,39 @@ export function AdvanceReceiptActions({
 }: AdvanceReceiptActionsProps) {
   useEffect(() => {
     if (autoPrint && typeof window !== "undefined") {
-      const t = setTimeout(() => window.print(), 500);
-      return () => clearTimeout(t);
+      let isMounted = true;
+      const doPrint = async () => {
+        try {
+          if (document.fonts) await document.fonts.ready;
+          const images = Array.from(document.images);
+          await Promise.all(images.map(img => {
+            if (img.complete) return Promise.resolve();
+            return new Promise(resolve => {
+              img.onload = resolve;
+              img.onerror = resolve;
+            });
+          }));
+        } catch (e) {}
+
+        if (!isMounted) return;
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            window.print();
+          });
+        });
+      };
+
+      doPrint();
+
+      const onAfterPrint = () => {
+        window.close();
+      };
+      window.addEventListener("afterprint", onAfterPrint);
+
+      return () => {
+        isMounted = false;
+        window.removeEventListener("afterprint", onAfterPrint);
+      };
     }
   }, [autoPrint]);
 

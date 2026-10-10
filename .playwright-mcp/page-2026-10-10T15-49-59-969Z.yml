@@ -1,0 +1,112 @@
+- generic [ref=f5e3]:
+  - generic [ref=f5e4]:
+    - generic [ref=f5e5]:
+      - link "Back to POS Control Panel" [ref=f5e7] [cursor=pointer]:
+        - /url: /pos/admin/secure/control-panel/hm-boutique
+      - heading "HM School of Fashion Designing and Tailoring — Order History" [level=1] [ref=f5e10]
+      - paragraph [ref=f5e15]: Completed sales register and finalized advance orders. Active advance orders are isolated in Advance Orders.
+    - generic [ref=f5e16]:
+      - button "Refresh" [ref=f5e17] [cursor=pointer]
+      - link "Advance Orders" [ref=f5e23] [cursor=pointer]:
+        - /url: /admin/advance-orders
+      - link "Outstanding Credits" [ref=f5e24] [cursor=pointer]:
+        - /url: /admin/outstanding-credits
+      - link "Analytics" [ref=f5e25] [cursor=pointer]:
+        - /url: /admin/analytics
+  - generic [ref=f5e51]:
+    - textbox "Search by invoice ID, customer name, or phone..." [ref=f5e53]
+    - generic [ref=f5e54]:
+      - generic [ref=f5e55]:
+        - button "All Time" [ref=f5e56] [cursor=pointer]
+        - button "Today" [ref=f5e57] [cursor=pointer]
+        - button "Week" [ref=f5e58] [cursor=pointer]
+        - button "Month" [ref=f5e59] [cursor=pointer]
+        - button "Year" [ref=f5e60] [cursor=pointer]
+      - combobox [ref=f5e61] [cursor=pointer]:
+        - option "All Bills (GST + Non-GST)" [selected]
+        - option "GST Invoices Only"
+        - option "Non-GST Bills Only"
+  - table [ref=f5e64]:
+    - rowgroup [ref=f5e65]:
+      - row [ref=f5e66]:
+        - columnheader "Invoice ID" [ref=f5e67]
+        - columnheader "Date & Time" [ref=f5e68]
+        - columnheader "Customer" [ref=f5e69]
+        - columnheader "Mode" [ref=f5e70]
+        - columnheader "Subtotal" [ref=f5e71]
+        - columnheader "GST" [ref=f5e72]
+        - columnheader "Grand Total" [ref=f5e73]
+        - columnheader "Status" [ref=f5e74]
+        - columnheader "Actions" [ref=f5e75]
+    - rowgroup [ref=f5e76]:
+      - row [ref=f5e77]:
+        - cell [ref=f5e78]
+        - cell [ref=f5e80]
+        - cell [ref=f5e82]
+        - cell [ref=f5e84]
+        - cell [ref=f5e86]
+        - cell [ref=f5e88]
+        - cell [ref=f5e90]
+        - cell [ref=f5e92]
+        - cell [ref=f5e94]
+      - row [ref=f5e96]:
+        - cell [ref=f5e97]
+        - cell [ref=f5e99]
+        - cell [ref=f5e101]
+        - cell [ref=f5e103]
+        - cell [ref=f5e105]
+        - cell [ref=f5e107]
+        - cell [ref=f5e109]
+        - cell [ref=f5e111]
+        - cell [ref=f5e113]
+      - row [ref=f5e115]:
+        - cell [ref=f5e116]
+        - cell [ref=f5e118]
+        - cell [ref=f5e120]
+        - cell [ref=f5e122]
+        - cell [ref=f5e124]
+        - cell [ref=f5e126]
+        - cell [ref=f5e128]
+        - cell [ref=f5e130]
+        - cell [ref=f5e132]
+      - row [ref=f5e134]:
+        - cell [ref=f5e135]
+        - cell [ref=f5e137]
+        - cell [ref=f5e139]
+        - cell [ref=f5e141]
+        - cell [ref=f5e143]
+        - cell [ref=f5e145]
+        - cell [ref=f5e147]
+        - cell [ref=f5e149]
+        - cell [ref=f5e151]
+      - row [ref=f5e153]:
+        - cell [ref=f5e154]
+        - cell [ref=f5e156]
+        - cell [ref=f5e158]
+        - cell [ref=f5e160]
+        - cell [ref=f5e162]
+        - cell [ref=f5e164]
+        - cell [ref=f5e166]
+        - cell [ref=f5e168]
+        - cell [ref=f5e170]
+      - row [ref=f5e172]:
+        - cell [ref=f5e173]
+        - cell [ref=f5e175]
+        - cell [ref=f5e177]
+        - cell [ref=f5e179]
+        - cell [ref=f5e181]
+        - cell [ref=f5e183]
+        - cell [ref=f5e185]
+        - cell [ref=f5e187]
+        - cell [ref=f5e189]
+      - row [ref=f5e191]:
+        - cell [ref=f5e192]
+        - cell [ref=f5e194]
+        - cell [ref=f5e196]
+        - cell [ref=f5e198]
+        - cell [ref=f5e200]
+        - cell [ref=f5e202]
+        - cell [ref=f5e204]
+        - cell [ref=f5e206]
+        - cell [ref=f5e208]
+  - generic [ref=f5e210]: Powered by Cenexa Systems © 2026

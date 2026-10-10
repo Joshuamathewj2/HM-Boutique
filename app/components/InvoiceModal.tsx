@@ -65,47 +65,7 @@ export default function InvoiceModal({
   if (!isOpen) return null;
 
   const handlePrint = () => {
-    if (!receiptRef.current) return;
-    const printContents = receiptRef.current.innerHTML;
-    const printWindow = window.open("", "_blank", "width=850,height=950");
-    if (!printWindow) {
-      window.print();
-      return;
-    }
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Invoice - ${order?.id || "Print"}</title>
-          <style>
-            @page {
-              size: A4 portrait;
-              margin: 12mm;
-            }
-            body {
-              font-family: system-ui, -apple-system, sans-serif;
-              background: #ffffff;
-              color: #000000;
-              margin: 0;
-              padding: 0;
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
-            }
-          </style>
-          <script src="https://cdn.tailwindcss.com"></script>
-        </head>
-        <body>
-          ${printContents}
-          <script>
-            window.onload = function() {
-              window.print();
-              setTimeout(function() { window.close(); }, 500);
-            };
-          </script>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
+    window.print();
   };
 
   const rawId = order?.invoice_no || order?.invoiceNo || order?.id || invoiceId || "—";
