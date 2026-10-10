@@ -2148,9 +2148,6 @@ export const dbStore = {
           updated_at: new Date().toISOString(),
           ...(status === 'COMPLETED' ? { completed_at: new Date().toISOString() } : {}),
         };
-        if (status === 'COMPLETED' && orderTotal > 0) {
-          advUpdates.deposit_amount = orderTotal;
-        }
 
         let qAdv = supabase.from('advance_orders').update(advUpdates);
         if (isUuid(id)) {
@@ -2166,12 +2163,7 @@ export const dbStore = {
           updated_at: new Date().toISOString(),
         };
         if (status === 'COMPLETED') {
-          ordUpdates.balance_due = 0;
-          ordUpdates.credit_status = 'paid';
-          if (orderTotal > 0) {
-            ordUpdates.amount_paid = orderTotal;
-            ordUpdates.cash_received = orderTotal;
-          }
+          // Paid / balance intentionally left untouched (static)
         } else if (status === 'PENDING' || status === 'READY') {
           ordUpdates.credit_status = 'outstanding';
           if (orderTotal > 0) {

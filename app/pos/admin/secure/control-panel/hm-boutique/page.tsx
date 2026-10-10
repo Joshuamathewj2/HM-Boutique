@@ -5409,7 +5409,8 @@ export default function POSBilling() {
                       </div>
                       {/* Total / Paid / Balance */}
                       {(() => {
-                        const rowTotals = calculateOrderTotals(a);
+                         // Paid/Balance stay static: ignore the COMPLETED auto-settle override
+                         const rowTotals = calculateOrderTotals({ ...a, status: a.status === "COMPLETED" ? "PENDING" : a.status, credit_status: undefined } as any);
                         return (
                           <div className="text-[11px]">
                             <p className="font-bold text-black">Total: ₹{rowTotals.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
@@ -5430,13 +5431,6 @@ export default function POSBilling() {
                           onChange={async (e) => {
                             if (a.status === "COMPLETED") return; // frozen: Completed is final
                             const next = e.target.value as AdvanceOrderStatus;
-                            if (next === "COMPLETED") {
-                              const totals = calculateOrderTotals(a);
-                              if (totals.balance > 0) {
-                                openReceiveBalance(a);
-                                return;
-                              }
-                            }
                             if (next === "CANCELLED") {
                               if (!confirm(`Cancel advance order ${a.id}? The deposit is treated as forfeit/refunded outside the system.`)) return;
                             }
@@ -5445,27 +5439,6 @@ export default function POSBilling() {
                               setAdvanceOrders((prev) =>
                                 prev.map((item) => {
                                   if (item.id === a.id) {
-                                    if (next === "COMPLETED") {
-                                      const totals = calculateOrderTotals(item);
-                                      return {
-                                        ...item,
-                                        status: "COMPLETED",
-                                        deposit_amount: totals.total,
-                                        amount_paid: totals.total,
-                                        remaining_balance: 0,
-                                        balance_due: 0,
-                                      };
-                                    } else if (item.status === "COMPLETED" && (next === "PENDING" || next === "READY")) {
-                                      const origDep = (item as any).initial_deposit ?? (item as any).original_deposit ?? item.deposit_amount;
-                                      return {
-                                        ...item,
-                                        status: next,
-                                        deposit_amount: origDep,
-                                        amount_paid: origDep,
-                                        remaining_balance: Math.max(0, Number(item.total_amount) - Number(origDep)),
-                                        balance_due: Math.max(0, Number(item.total_amount) - Number(origDep)),
-                                      };
-                                    }
                                     return { ...item, status: next };
                                   }
                                   return item;
@@ -5494,7 +5467,8 @@ export default function POSBilling() {
                       {/* Actions — Cancel (X) removed */}
                       <div className="flex items-center justify-end gap-1.5 flex-nowrap">
                         <button onClick={() => {
-                          const rowTotals = calculateOrderTotals(a);
+                          // Paid/Balance stay static: ignore the COMPLETED auto-settle override
+                         const rowTotals = calculateOrderTotals({ ...a, status: a.status === "COMPLETED" ? "PENDING" : a.status, credit_status: undefined } as any);
                           shareAdvanceReceiptWhatsApp({
                             id: a.id,
                             customerName: a.customer_name,
