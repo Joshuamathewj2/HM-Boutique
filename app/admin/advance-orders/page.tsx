@@ -23,6 +23,7 @@ import { normalizeOrder } from "@/lib/normalizeOrder";
 import { isUuid } from "@/lib/ids";
 import { toast } from "@/lib/toast";
 import { completeOrder } from "@/lib/completeOrder";
+import InvoiceModal from "@/app/components/InvoiceModal";
 
 import { getOrderTotals, calculateOrderTotals } from "@/lib/orderTotals";
 
@@ -100,6 +101,11 @@ export default function AdminAdvanceOrdersPage() {
   const [statusFilter, setStatusFilter] = useState<
     "ALL" | "PENDING" | "READY" | "COMPLETED" | "CANCELLED"
   >("ALL");
+
+  // ── Completion popup + invoice bill state ─────────────────────────────────
+  const [completionPopup, setCompletionPopup] = useState<{ order: any; paid: number } | null>(null);
+  const [showInvoice, setShowInvoice] = useState(false);
+  const [invoiceOrder, setInvoiceOrder] = useState<any | null>(null);
 
   const fetchSeqRef = useRef<number>(0);
   const isMutatingRef = useRef<boolean>(false);
@@ -241,10 +247,21 @@ export default function AdminAdvanceOrdersPage() {
       setAdvanceOrders((prev) =>
         prev.map((x) => (x.id === updatedRow.id ? (normalizeOrder(updatedRow) as any) : x))
       );
-      router.refresh();
+      // NOTE: router.refresh() intentionally removed — it wipes client state
+      // (completionPopup, showInvoice) before they can render. The row is already
+      // patched in advanceOrders state above, so the UI is already correct.
       toast.success(
         newStatus === STATUS.COMPLETED ? "Marked as completed" : `Status updated to ${newStatus}`
       );
+
+      // Open completion popup + invoice bill after marking Completed
+      if (newStatus === STATUS.COMPLETED) {
+        const normalized = normalizeOrder(updatedRow) as any;
+        const paidAmt = Number(updatedRow.amount_paid ?? updatedRow.grand_total ?? updatedRow.total ?? 0);
+        setCompletionPopup({ order: normalized, paid: paidAmt });
+        setInvoiceOrder(normalized);
+        setShowInvoice(true);
+      }
     } catch (e: any) {
       toast.error(e?.message || String(e));
     } finally {
@@ -575,6 +592,52 @@ export default function AdminAdvanceOrdersPage() {
           Powered by Cenexa Systems © 2026
         </div>
       </div>
+
+      {/* ── Completion success popup ───────────────────────────────────────── */}
+      {completionPopup && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 flex flex-col items-center gap-4 border border-emerald-200 animate-in zoom-in-95 duration-150">
+            <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center">
+              <CheckCircle className="w-8 h-8 text-emerald-600" />
+            </div>
+            <div className="text-center">
+              <p className="text-base font-black text-gray-900">Order Completed!</p>
+              <p className="text-xs text-gray-500 mt-1">
+                {completionPopup.order?.customer_name || "Customer"} — ₹{Number(completionPopup.paid).toLocaleString("en-IN", { minimumFractionDigits: 2 })} collected
+              </p>
+              <p className="text-[10px] text-gray-400 mt-0.5 font-mono">
+                {completionPopup.order?.invoice_no || completionPopup.order?.invoiceNo || completionPopup.order?.id}
+              </p>
+            </div>
+            <div className="flex gap-2 w-full">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowInvoice(true);
+                  setInvoiceOrder(completionPopup.order);
+                }}
+                className="flex-1 px-4 py-2 bg-[#F500A0] hover:bg-[#D4008A] text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
+              >
+                View Invoice
+              </button>
+              <button
+                type="button"
+                onClick={() => setCompletionPopup(null)}
+                className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Invoice / Bill preview modal ───────────────────────────────────── */}
+      <InvoiceModal
+        isOpen={showInvoice}
+        onClose={() => setShowInvoice(false)}
+        invoiceData={invoiceOrder}
+      />
     </div>
   );
 }

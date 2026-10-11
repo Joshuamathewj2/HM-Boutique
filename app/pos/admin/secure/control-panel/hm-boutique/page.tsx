@@ -5431,6 +5431,12 @@ export default function POSBilling() {
                           onChange={async (e) => {
                             if (a.status === "COMPLETED") return; // frozen: Completed is final
                             const next = e.target.value as AdvanceOrderStatus;
+                            if (next === "COMPLETED") {
+                              // Route through the existing Receive Balance popup → confirmReceiveBalance,
+                              // which settles the balance, opens the Bill popup and then locks the row.
+                              openReceiveBalance(a);
+                              return;
+                            }
                             if (next === "CANCELLED") {
                               if (!confirm(`Cancel advance order ${a.id}? The deposit is treated as forfeit/refunded outside the system.`)) return;
                             }
