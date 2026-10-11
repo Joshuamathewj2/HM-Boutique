@@ -180,6 +180,9 @@ export default function AdminAdvanceOrdersPage() {
   }, [loadData]);
 
   const handleStatusChange = async (orderId: string, newStatus: string, o: any) => {
+    // Lock: a COMPLETED order can never change status again
+    if (String(o?.status || "").toUpperCase() === STATUS.COMPLETED) return;
+
     if (!isUuid(o.id)) {
       toast.error("Row has no valid UUID");
       return;
@@ -210,6 +213,7 @@ export default function AdminAdvanceOrdersPage() {
             updated_at: new Date().toISOString(),
           })
           .eq("id", o.id)
+          .neq("status", STATUS.COMPLETED) // server-side lock: never modify completed orders
           .select()
           .maybeSingle();
 
@@ -519,8 +523,9 @@ export default function AdminAdvanceOrdersPage() {
                         <td className="px-4 py-3 text-center">
                           <select
                             value={a.status}
+                             disabled={statusUpper === STATUS.COMPLETED}
                             onChange={(e) => handleStatusChange(a.id, e.target.value, a)}
-                            className={`appearance-none px-2.5 py-1 rounded-xl text-[10px] font-bold uppercase tracking-wider border cursor-pointer focus:outline-none transition-colors ${
+                            className={`appearance-none px-2.5 py-1 rounded-xl text-[10px] font-bold uppercase tracking-wider border focus:outline-none transition-colors ${statusUpper === STATUS.COMPLETED ? "cursor-not-allowed opacity-70" : "cursor-pointer"} ${
                               statusUpper === STATUS.COMPLETED
                                 ? "bg-emerald-50 text-emerald-800 border-emerald-300"
                                 : statusUpper === STATUS.READY
