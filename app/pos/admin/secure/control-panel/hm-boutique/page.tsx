@@ -97,7 +97,7 @@ import PrintSettingsModal from "@/app/components/PrintSettingsModal";
 import { checkCoupon, adjustProductStock, seedCatalog } from "@/app/pos/actions";
 import { BRAND_EN, BRAND_ADDRESS, BRAND_PHONE_DISPLAY, BRAND_LOGO, DEFAULT_SHOP_PROFILE } from "@/lib/brand";
 import { calculateTaxAndTotals, formatINR } from "@/lib/money";
-import { getOrderTotals, calculateOrderTotals } from "@/lib/orderTotals";
+import { getOrderTotals, calculateOrderTotals, calculateBillTotals } from "@/lib/orderTotals";
 import { ORDER_STATUS } from "@/lib/orderStatus";
 import { normalizeOrder } from "@/lib/normalizeOrder";
 
@@ -847,6 +847,16 @@ export default function POSBilling() {
     total: number;
     deposit: number;
     balance: number;
+    subtotal?: number;
+    discount?: number;
+    discountAmount?: number;
+    discountType?: "PERCENT" | "FIXED";
+    discountValue?: number;
+    deliveryFee?: number;
+    isGst?: boolean;
+    gstPercentage?: number;
+    gstAmount?: number;
+    items?: any[];
   } | null>(null);
 
   const orderToPrint = useMemo(() => {
@@ -862,7 +872,16 @@ export default function POSBilling() {
           deposit_amount: advanceReceipt.deposit,
           is_advance: true,
           status: "pending_deposit",
-          items: [],
+          items: advanceReceipt.items || [],
+          subtotal: advanceReceipt.subtotal,
+          discount_amount: advanceReceipt.discountAmount ?? advanceReceipt.discount,
+          discount_value: advanceReceipt.discountValue,
+          discount_type: advanceReceipt.discountType,
+          delivery_fee: advanceReceipt.deliveryFee,
+          delivery_charge: advanceReceipt.deliveryFee,
+          is_gst: advanceReceipt.isGst,
+          gst_percentage: advanceReceipt.gstPercentage,
+          gst_amount: advanceReceipt.gstAmount,
         });
       }
       if (selectedAdvance && (selectedAdvance.id === printModalData.id || selectedAdvance.id === cleanId)) {
@@ -1218,27 +1237,27 @@ export default function POSBilling() {
     setCatalog((prev) => prev.filter((c) => c.id !== id));
   };
 
-  const subtotal = Math.round(items.reduce((acc, item) => acc + (Number(item.price) || 0) * (Number(item.qty) || 1), 0) * 100) / 100;
-  const manualDiscount =
-    discountType === "percent"
-      ? (subtotal * (Number(discountValue) || 0)) / 100
-      : Number(discountValue) || 0;
-  const couponDiscount = appliedCoupon ? Number(appliedCoupon.discountAmount) || 0 : 0;
-  const calculatedDiscount = Math.round((manualDiscount + couponDiscount) * 100) / 100;
-  const netDiscounted = Math.max(0, subtotal - calculatedDiscount);
+  const currentBillTotals = calculateBillTotals({
+    items,
+    discountType: discountType === "percent" ? "PERCENT" : "FIXED",
+    discountValue: Number(discountValue) || 0,
+    couponDiscount: appliedCoupon ? Number(appliedCoupon.discountAmount) || 0 : 0,
+    isGst: applyGST,
+    gstPercentage: applyGST ? Number(gstPercentage) || 0 : 0,
+    taxMode,
+    deliveryFee: Number(deliveryFee) || 0,
+  });
 
-  const taxCalculation = calculateTaxAndTotals(
-    netDiscounted,
-    applyGST ? Number(gstPercentage) || 0 : 0,
-    Number(deliveryFee) || 0,
-    taxMode
-  );
-
-  const taxableAmount = taxCalculation.taxable;
-  const gstAmount = taxCalculation.gst;
-  const cgstAmount = taxCalculation.cgst;
-  const sgstAmount = taxCalculation.sgst;
-  const grandTotal = taxCalculation.grand;
+  const subtotal = currentBillTotals.subtotal;
+  const manualDiscount = currentBillTotals.manualDiscount;
+  const couponDiscount = currentBillTotals.couponDiscount;
+  const calculatedDiscount = currentBillTotals.discount;
+  const netDiscounted = currentBillTotals.taxableAmount;
+  const taxableAmount = currentBillTotals.taxableAmount;
+  const gstAmount = currentBillTotals.gstAmount;
+  const cgstAmount = currentBillTotals.cgst;
+  const sgstAmount = currentBillTotals.sgst;
+  const grandTotal = currentBillTotals.grandTotal;
 
   const handleApplyCoupon = async () => {
     if (!couponCodeInput.trim()) return;
@@ -1392,6 +1411,19 @@ export default function POSBilling() {
       // Capture receipt details before clearing the form.
       const receiptCustomerName = customerName || "Guest";
       const receiptCustomerPhone = customerPhone;
+      const receiptItems = items.map((i) => ({
+        snapshot_name: i.name,
+        snapshot_price: i.price,
+        quantity: i.qty,
+      }));
+      const receiptSubtotal = subtotal;
+      const receiptDiscount = calculatedDiscount;
+      const receiptDiscountType = discountType === "percent" ? "PERCENT" : "FIXED";
+      const receiptDiscountValue = Number(discountValue) || 0;
+      const receiptDeliveryFee = Number(deliveryFee) || 0;
+      const receiptIsGst = applyGST;
+      const receiptGstPercentage = applyGST ? Number(gstPercentage) || 0 : 0;
+      const receiptGstAmount = applyGST ? Number(gstAmount) || 0 : 0;
 
       // Reset billing form.
       setItems([{ id: "1", name: "", desc: "", price: 0, qty: 1 }]);
@@ -1417,6 +1449,16 @@ export default function POSBilling() {
         total: grandTotal,
         deposit,
         balance: Math.max(0, grandTotal - deposit),
+        subtotal: receiptSubtotal,
+        discount: receiptDiscount,
+        discountAmount: receiptDiscount,
+        discountType: receiptDiscountType as "PERCENT" | "FIXED",
+        discountValue: receiptDiscountValue,
+        deliveryFee: receiptDeliveryFee,
+        isGst: receiptIsGst,
+        gstPercentage: receiptGstPercentage,
+        gstAmount: receiptGstAmount,
+        items: receiptItems,
       });
     } catch (err) {
       console.error("Failed to save advance order:", err);
@@ -1629,24 +1671,22 @@ export default function POSBilling() {
     }
     const itemsToSave = items;
 
-    // Recalculate values locally to avoid React state lag issues
-    const localSubtotal = Math.round(itemsToSave.reduce((acc, item) => acc + (Number(item.price) || 0) * (Number(item.qty) || 1), 0) * 100) / 100;
-    const localCalculatedDiscount = Math.round((
-      discountType === "percent"
-        ? (localSubtotal * (Number(discountValue) || 0)) / 100
-        : Number(discountValue) || 0
-    ) * 100) / 100;
-    const localNetDiscounted = Math.max(0, Math.round((localSubtotal - localCalculatedDiscount) * 100) / 100);
-
-    const localTaxResult = calculateTaxAndTotals(
-      localNetDiscounted,
-      applyGST ? Number(gstPercentage) || 0 : 0,
-      Number(deliveryFee) || 0,
-      taxMode
-    );
-    const localTaxableAmount = localTaxResult.taxable;
-    const localGstAmount = localTaxResult.gst;
-    const localGrandTotal = localTaxResult.grand;
+    const localTotals = calculateBillTotals({
+      items: itemsToSave,
+      discountType: discountType === "percent" ? "PERCENT" : "FIXED",
+      discountValue: Number(discountValue) || 0,
+      couponDiscount: appliedCoupon ? Number(appliedCoupon.discountAmount) || 0 : 0,
+      isGst: applyGST,
+      gstPercentage: applyGST ? Number(gstPercentage) || 0 : 0,
+      taxMode,
+      deliveryFee: Number(deliveryFee) || 0,
+    });
+    const localSubtotal = localTotals.subtotal;
+    const localCalculatedDiscount = localTotals.discount;
+    const localNetDiscounted = localTotals.taxableAmount;
+    const localTaxableAmount = localTotals.taxableAmount;
+    const localGstAmount = localTotals.gstAmount;
+    const localGrandTotal = localTotals.grandTotal;
 
     // Validate totals against PostgreSQL numeric(10,2) overflow limit (99,999,999.99)
     const MAX_LIMIT = 99999999.99;
@@ -1871,6 +1911,7 @@ export default function POSBilling() {
       if (existingWindow) existingWindow.close();
       return;
     }
+    const orderTotals = calculateBillTotals(order);
     const domain = window.location.origin;
     const invoiceUrl = `${domain}/invoice/${order.id}`;
     const shopEmoji = String.fromCodePoint(0x2728);
@@ -1878,27 +1919,23 @@ export default function POSBilling() {
     const moneyEmoji = String.fromCodePoint(0x1f4b0);
     const receiptEmoji = String.fromCodePoint(0x1f4e6);
     let message = `${shopEmoji} *HM BOUTIQUE* ${shopEmoji}\n\n`;
-    message += `${checkEmoji} Here are your ${order.isGst ? "GST invoice" : "bill"} details!\n\n`;
+    message += `${checkEmoji} Here are your ${orderTotals.isGst ? "GST invoice" : "bill"} details!\n\n`;
 
-    message += `Subtotal (incl. GST): ₹${order.subtotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}\n`;
-    if (order.discount > 0) {
-      message += `Discount Applied: -₹${order.discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}\n`;
+    message += `Subtotal: ₹${orderTotals.subtotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}\n`;
+    if (orderTotals.discount > 0) {
+      message += `Discount Applied: -₹${orderTotals.discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}\n`;
     }
 
-    // GST already sits inside the subtotal — surface it for the customer only.
-    const gstInsideBill = Number(order.gstAmount) || 0;
-    if (order.isGst && gstInsideBill > 0.1) {
-      const gstLabel = order.gstPercentage
-        ? `GST (${order.gstPercentage}% incl.)`
-        : "GST (incl.)";
-      message += `${gstLabel}: ₹${gstInsideBill.toLocaleString(undefined, { minimumFractionDigits: 2 })}\n`;
+    if (orderTotals.isGst && orderTotals.gstAmount > 0) {
+      message += `Taxable Amount: ₹${orderTotals.taxableAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}\n`;
+      message += `GST (${orderTotals.gstPercent}%): +₹${orderTotals.gstAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}\n`;
     }
 
-    if (order.deliveryFee > 0) {
-      message += `Delivery Fee: ₹${order.deliveryFee.toLocaleString(undefined, { minimumFractionDigits: 2 })}\n`;
+    if (orderTotals.deliveryFee > 0) {
+      message += `Delivery Fee: ₹${orderTotals.deliveryFee.toLocaleString(undefined, { minimumFractionDigits: 2 })}\n`;
     }
 
-    message += `\n${moneyEmoji} *Total Amount: ₹${order.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}*\n`;
+    message += `\n${moneyEmoji} *Total Amount: ₹${orderTotals.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}*\n`;
     message += `Payment: ${order.paymentMode}\n\n`;
     message += `${receiptEmoji} View and download your detailed digital receipt here:\n${invoiceUrl}`;
     const encodedMessage = encodeURIComponent(message);

@@ -726,7 +726,7 @@ export const dbStore = {
               quantity: Number(it.quantity || it.qty || 1),
             }));
 
-            const discount = Number(o.discount_amount || 0) + Number(o.manual_discount_amount || 0);
+            const discount = Number(o.discount_amount ?? o.manual_discount_amount ?? 0);
             const total = Number(o.total || o.grand_total || 0);
             const rawSubtotal = Number(o.subtotal || (mappedItems.reduce((sum, it) => sum + (it.snapshot_price * it.quantity), 0)) || total);
             const isGst = Boolean(
@@ -971,7 +971,7 @@ export const dbStore = {
             quantity: Number(it.quantity || it.qty || 1),
           }));
 
-          const discount = Number(row.discount_amount || row.discount || 0) + Number(row.manual_discount_amount || 0);
+          const discount = Number(row.discount_amount ?? row.discount ?? row.manual_discount_amount ?? 0);
           const total = Number(row.total || row.grand_total || row.total_amount || 0);
           const rawSubtotal = Number(row.subtotal || (mappedItems.reduce((sum, it) => sum + (it.snapshot_price * it.quantity), 0)) || total);
           const isGst = Boolean(
@@ -1681,7 +1681,7 @@ export const dbStore = {
               matchedOrd?.gst_rate ||
               (gstAmount > 0 && subtotal > 0 ? Math.round((gstAmount / subtotal) * 100) : (isGst ? 18 : 0))
             );
-            const discountAmount = Number(matchedOrd?.discount_amount || 0) + Number(matchedOrd?.manual_discount_amount || 0);
+            const discountAmount = Number(matchedOrd?.discount_amount ?? matchedOrd?.manual_discount_amount ?? 0);
             const discountValue = Number(matchedOrd?.manual_discount_value || matchedOrd?.discount_value || 0);
             const discountType = matchedOrd?.manual_discount_type === 'percent' ? 'PERCENT' : 'FIXED';
             const deliveryFee = Number(matchedOrd?.delivery_charge || matchedOrd?.delivery_fee || 0);
@@ -1767,7 +1767,7 @@ export const dbStore = {
           o.gst_rate ||
           (gstAmount > 0 && subtotal > 0 ? Math.round((gstAmount / subtotal) * 100) : (isGst ? 18 : 0))
         );
-        const discountAmount = Number(o.discount_amount || 0) + Number(o.manual_discount_amount || 0);
+        const discountAmount = Number(o.discount_amount ?? o.manual_discount_amount ?? 0);
         const discountValue = Number(o.manual_discount_value || o.discount_value || 0);
         const discountType = o.manual_discount_type === 'percent' ? 'PERCENT' : 'FIXED';
         const deliveryFee = Number(o.delivery_charge || o.delivery_fee || 0);
@@ -1918,7 +1918,7 @@ export const dbStore = {
             is_gst: isGst,
             gst_percentage: gstPercentage,
             gst_amount: gstAmount,
-            discount_amount: Number(ord.discount_amount || 0) + Number(ord.manual_discount_amount || 0),
+            discount_amount: Number(ord.discount_amount ?? ord.manual_discount_amount ?? 0),
             discount_type: ord.manual_discount_type === 'percent' ? 'PERCENT' : 'FIXED',
             discount_value: Number(ord.manual_discount_value || 0),
             delivery_fee: Number(ord.delivery_charge || ord.delivery_fee || 0),
@@ -2029,7 +2029,7 @@ export const dbStore = {
             subtotal: payload.subtotal,
             total: payload.totalAmount,
             discount_amount: payload.discountAmount || 0,
-            manual_discount_amount: payload.discountAmount || 0,
+            manual_discount_amount: 0,
             manual_discount_type: payload.discountType === 'PERCENT' ? 'percent' : 'flat',
             manual_discount_value: payload.discountValue || 0,
             gst_enabled: isGst,

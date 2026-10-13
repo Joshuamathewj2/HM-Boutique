@@ -1,62 +1,145 @@
 /**
  * lib/orderTotals.ts
  *
- * Single source of truth calculation for orders, advance orders, and credit sales.
- * Used across:
- * - Advance Orders table, summary cards, and status transitions
- * - Outstanding Credits table and summary cards
- * - "Receive Remaining Payment" modal
- * - Advance Order invoice (/advance/[id])
- * - Outstanding Credits invoice & Order History invoice (/invoice/[id], PrintableReceipt, InvoiceModal)
- * - PDF print & WhatsApp share generators
+ * Single source of truth calculation for orders, advance orders, credit sales,
+ * billing panel, invoice preview, print receipts, and WhatsApp share messages.
  */
 
 export interface OrderTotals {
   subtotal: number;
-  discount: number;
+  manualDiscount: number;
+  couponDiscount: number;
+  discount: number; // total discount = manualDiscount + couponDiscount
   discountType: 'PERCENT' | 'FIXED';
   discountValue: number;
+  taxableAmount: number;
   taxable: number;
+  taxMode: 'exclusive' | 'inclusive';
   gstPercent: number;
   gstRate: number;
   gstAmount: number;
+  gstTotal: number;
   gst: number;
   cgst: number;
   sgst: number;
+  delivery: number;
   deliveryFee: number;
   grandTotal: number;
   total: number;
   paid: number;
   balance: number;
+  isGst: boolean;
 }
 
-export function getOrderTotals(record: any): OrderTotals {
-  if (!record || typeof record !== 'object') {
+export type BillTotalsResult = OrderTotals;
+
+export interface BillCalculationInput {
+  subtotal?: number;
+  items?: any[];
+  order_items?: any[];
+  products?: any[];
+  discountType?: 'PERCENT' | 'FIXED' | 'percent' | 'flat' | string;
+  discount_type?: string;
+  manual_discount_type?: string;
+  discountValue?: number;
+  discount_value?: number;
+  manual_discount_value?: number;
+  manualDiscount?: number;
+  manual_discount_amount?: number;
+  couponDiscount?: number;
+  coupon_discount_amount?: number;
+  coupon_discount?: number;
+  couponCode?: string | null;
+  coupon_code?: string | null;
+  discount?: number;
+  discount_amount?: number;
+  taxMode?: 'exclusive' | 'inclusive' | string;
+  tax_mode?: string;
+  isGst?: boolean;
+  is_gst?: boolean;
+  gst_enabled?: boolean;
+  applyGST?: boolean;
+  gstPercentage?: number;
+  gst_percentage?: number;
+  gstPercent?: number;
+  gst_percent?: number;
+  gstRate?: number;
+  gst_rate?: number;
+  gstAmount?: number;
+  gst_amount?: number;
+  total_gst?: number;
+  deliveryFee?: number;
+  delivery_fee?: number;
+  delivery_charge?: number;
+  deliveryCharge?: number;
+  shipping?: number;
+  paid?: number;
+  amount_paid?: number;
+  deposit_amount?: number;
+  deposit?: number;
+  cash_received?: number;
+  amount_received?: number;
+  total?: number;
+  grandTotal?: number;
+  grand_total?: number;
+  total_amount?: number;
+  status?: string;
+  credit_status?: string | null;
+  is_advance?: boolean;
+  order_type?: string;
+  invoice_no?: string;
+  id?: string;
+  [key: string]: any;
+}
+
+/**
+ * Calculates all billing and order totals using integer paise to eliminate floating-point drift.
+ * Rules:
+ * - Subtotal: sum of items (or provided subtotal)
+ * - Discounts: manualDiscount + couponDiscount (subtracted from Subtotal before GST)
+ * - Taxable = Math.max(0, Subtotal - Discounts)
+ * - Exclusive GST: GST applies on Taxable, Delivery added after GST
+ * - Inclusive GST: Taxable = (Subtotal - Discounts) / (1 + rate/100), Delivery added after
+ * - Delivery: never taxed, strictly added after GST
+ * - CGST / SGST: strict 50/50 split of GST to the paisa (cgst + sgst === gst)
+ * - Balance = Math.max(0, GrandTotal - Paid) (0 if settled)
+ */
+export function calculateBillTotals(input: BillCalculationInput | any): BillTotalsResult {
+  if (!input || typeof input !== 'object') {
     return {
       subtotal: 0,
+      manualDiscount: 0,
+      couponDiscount: 0,
       discount: 0,
       discountType: 'FIXED',
       discountValue: 0,
+      taxableAmount: 0,
       taxable: 0,
+      taxMode: 'exclusive',
       gstPercent: 0,
       gstRate: 0,
       gstAmount: 0,
+      gstTotal: 0,
       gst: 0,
       cgst: 0,
       sgst: 0,
+      delivery: 0,
       deliveryFee: 0,
       grandTotal: 0,
       total: 0,
       paid: 0,
       balance: 0,
+      isGst: false,
     };
   }
 
-  // 1. Items subtotal (fallback to record.subtotal if items missing or empty)
-  const items: any[] = Array.isArray(record.items)
-    ? record.items
-    : Array.isArray(record.order_items)
-    ? record.order_items
+  // 1. Subtotal calculation
+  const items: any[] = Array.isArray(input.items)
+    ? input.items
+    : Array.isArray(input.order_items)
+    ? input.order_items
+    : Array.isArray(input.products)
+    ? input.products
     : [];
 
   let itemsSum = 0;
@@ -73,128 +156,147 @@ export function getOrderTotals(record: any): OrderTotals {
   const subtotalRaw =
     itemsSum > 0
       ? itemsSum
-      : Number(record.subtotal ?? record.total_amount ?? record.total ?? record.grand_total ?? 0);
-  const subtotal = Math.round(subtotalRaw * 100) / 100;
+      : Number(input.subtotal ?? input.total_amount ?? input.total ?? input.grand_total ?? input.grandTotal ?? 0);
+  const subtotal = Math.round(Math.max(0, subtotalRaw) * 100) / 100;
 
-  // 2. Discount: subtracted from Subtotal first (support PERCENT and FIXED)
+  // 2. Discount type & value
   const rawType = String(
-    record.discount_type ||
-      record.discountType ||
-      (record.discount_percent || record.discountPercent ? 'PERCENT' : 'FIXED')
+    input.discountType ||
+    input.discount_type ||
+    input.manual_discount_type ||
+    (input.discount_percent || input.discountPercent ? 'PERCENT' : 'FIXED')
   ).toUpperCase();
   const isPercent = rawType === 'PERCENT' || rawType === '%' || rawType === 'PERCENTAGE';
   const discountType: 'PERCENT' | 'FIXED' = isPercent ? 'PERCENT' : 'FIXED';
 
   const discountValue = Number(
-    record.discount_value ??
-      record.discountValue ??
-      (isPercent
-        ? record.discount_percent ?? record.discountPercent ?? 0
-        : record.discount_amount ??
-          record.discountAmount ??
-          record.manual_discount_amount ??
-          record.discount ??
-          0)
+    input.discountValue ??
+    input.discount_value ??
+    input.manual_discount_value ??
+    (isPercent ? (input.discount_percent ?? input.discountPercent ?? 0) : 0)
   );
 
-  let discount = 0;
-  if (isPercent) {
-    discount = Math.round(((subtotal * discountValue) / 100) * 100) / 100;
-  } else {
-    discount = Math.round(
-      Number(
-        record.discount_amount ??
-          record.discountAmount ??
-          record.manual_discount_amount ??
-          record.discount ??
-          discountValue ??
-          0
-      ) * 100
-    ) / 100;
-  }
-  discount = Math.min(subtotal, Math.max(0, discount));
-
-  // 3. Taxable = Subtotal - Discount
-  const taxable = Math.max(0, Math.round((subtotal - discount) * 100) / 100);
-
-  // 4. Delivery fee: added after GST and not taxed
-  const deliveryFee = Math.round(
+  // Coupon discount
+  const couponDiscount = Math.round(
     Number(
-      record.delivery_fee ??
-        record.deliveryFee ??
-        record.delivery_charge ??
-        record.deliveryCharge ??
-        record.shipping ??
-        0
+      input.couponDiscount ??
+      input.coupon_discount_amount ??
+      input.coupon_discount ??
+      0
     ) * 100
   ) / 100;
 
-  // 5. GST: calculated on Taxable only
-  const rawGstRate = Number(
-    record.gst_percentage ??
-      record.gstPercentage ??
-      record.gst_percent ??
-      record.gstPercent ??
-      record.gst_rate ??
-      record.gstRate ??
+  // Manual discount: computed from percentage or fixed amount
+  let manualDiscount = 0;
+  if (input.manualDiscount !== undefined && input.manualDiscount !== null) {
+    manualDiscount = Math.round(Number(input.manualDiscount) * 100) / 100;
+  } else if (isPercent) {
+    manualDiscount = Math.round(((subtotal * Math.max(0, discountValue)) / 100) * 100) / 100;
+  } else {
+    // Fixed amount: check manual_discount_value, manual_discount_amount, or discount_amount
+    const rawFixed = Number(
+      discountValue > 0
+        ? discountValue
+        : (input.manual_discount_value && input.manual_discount_value > 0
+            ? input.manual_discount_value
+            : (input.manual_discount_amount && input.manual_discount_amount > 0
+                ? input.manual_discount_amount
+                : (input.discount_amount ?? input.discountAmount ?? input.discount ?? 0)))
+    );
+    manualDiscount = Math.round(Math.max(0, rawFixed) * 100) / 100;
+    // If discount was read from an already-combined discount_amount and couponDiscount was provided separately, avoid double counting
+    if (couponDiscount > 0 && manualDiscount > couponDiscount && (input.discount_amount || input.discount)) {
+      if (manualDiscount === Number(input.discount_amount || input.discount)) {
+        manualDiscount = Math.max(0, manualDiscount - couponDiscount);
+      }
+    }
+  }
+
+  manualDiscount = Math.min(subtotal, Math.max(0, manualDiscount));
+  const totalDiscount = Math.min(subtotal, Math.round((manualDiscount + couponDiscount) * 100) / 100);
+
+  // 3. Taxable Amount (Subtotal - Discounts)
+  const netAfterDiscount = Math.max(0, Math.round((subtotal - totalDiscount) * 100) / 100);
+
+  // 4. Delivery fee (added after GST, never taxed)
+  const deliveryFee = Math.round(
+    Number(
+      input.deliveryFee ??
+      input.delivery_fee ??
+      input.delivery_charge ??
+      input.deliveryCharge ??
+      input.shipping ??
       0
+    ) * 100
+  ) / 100;
+
+  // 5. GST determination and mode
+  const rawGstRate = Number(
+    input.gstPercentage ??
+    input.gst_percentage ??
+    input.gstPercent ??
+    input.gst_percent ??
+    input.gstRate ??
+    input.gst_rate ??
+    0
   );
-  const isGstExplicit = Boolean(record.is_gst ?? record.isGst ?? record.gst_enabled ?? record.applyGST);
-  const storedGst = Number(record.gst_amount ?? record.gstAmount ?? record.total_gst ?? 0);
-  const recordedTotal = Number(record.total ?? record.grand_total ?? record.grandTotal ?? record.total_amount ?? 0);
+  const isGstExplicit = Boolean(
+    input.isGst ??
+    input.is_gst ??
+    input.gst_enabled ??
+    input.applyGST ??
+    (rawGstRate > 0)
+  );
+
+  const taxMode: 'exclusive' | 'inclusive' =
+    String(input.taxMode || input.tax_mode || 'exclusive').toLowerCase() === 'inclusive'
+      ? 'inclusive'
+      : 'exclusive';
 
   let gstPercent = 0;
   let gstAmount = 0;
+  let taxableAmount = netAfterDiscount;
 
-  if (rawGstRate > 0) {
-    gstPercent = rawGstRate;
-    gstAmount = storedGst > 0 ? storedGst : Math.round(((taxable * gstPercent) / 100) * 100) / 100;
-  } else if (storedGst > 0) {
-    gstAmount = Math.round(storedGst * 100) / 100;
-    gstPercent = taxable > 0 ? Math.round((gstAmount / taxable) * 100) : (isGstExplicit ? 18 : 0);
-  } else if (isGstExplicit) {
-    const diff = recordedTotal > (taxable + deliveryFee)
-      ? Math.round((recordedTotal - taxable - deliveryFee) * 100) / 100
-      : 0;
-    if (diff > 0) {
-      gstAmount = diff;
-      gstPercent = taxable > 0 ? Math.round((diff / taxable) * 100) : 18;
+  if (rawGstRate > 0 || isGstExplicit) {
+    gstPercent = rawGstRate > 0 ? rawGstRate : 18;
+
+    if (gstPercent > 0 && netAfterDiscount > 0) {
+      if (taxMode === 'inclusive') {
+        const netPaise = Math.round(netAfterDiscount * 100);
+        const taxablePaise = Math.round(netPaise / (1 + gstPercent / 100));
+        const gstPaise = netPaise - taxablePaise;
+        taxableAmount = taxablePaise / 100;
+        gstAmount = gstPaise / 100;
+      } else {
+        // Exclusive mode
+        taxableAmount = netAfterDiscount;
+        gstAmount = Math.round(((taxableAmount * gstPercent) / 100) * 100) / 100;
+      }
     } else {
-      gstPercent = 18;
-      gstAmount = Math.round(((taxable * 18) / 100) * 100) / 100;
+      taxableAmount = netAfterDiscount;
+      gstAmount = 0;
     }
-  } else if (
-    recordedTotal > 0 &&
-    Math.round((recordedTotal - taxable - deliveryFee) * 100) / 100 > 0 &&
-    (record.is_advance ||
-      String(record.order_type || '').toUpperCase() === 'ADVANCE' ||
-      String(record.invoice_no || '').startsWith('DEP-') ||
-      String(record.id || '').startsWith('DEP-') ||
-      Boolean(record.deposit_id))
-  ) {
-    // Old advance order that had total saved as GST-inclusive (e.g. 10,500) but no GST fields
-    const diff = Math.round((recordedTotal - taxable - deliveryFee) * 100) / 100;
-    gstAmount = diff;
-    gstPercent = taxable > 0 ? Math.round((diff / taxable) * 100) : 0;
   } else {
-    // Non-GST order
     gstPercent = 0;
     gstAmount = 0;
+    taxableAmount = netAfterDiscount;
   }
 
-  // CGST and SGST: 50/50 split of gstAmount, strictly to the paisa
+  // CGST and SGST: strict 50/50 split to the paisa
   const gstPaise = Math.round(gstAmount * 100);
   const cgstPaise = Math.floor(gstPaise / 2);
   const sgstPaise = gstPaise - cgstPaise;
   const cgst = cgstPaise / 100;
   const sgst = sgstPaise / 100;
 
-  // 6. TOTAL = Taxable + GST + Delivery
-  const grandTotal = Math.round((taxable + gstAmount + deliveryFee) * 100) / 100;
+  // 6. Grand Total
+  // Exclusive: taxable + gst + delivery
+  // Inclusive: netAfterDiscount + delivery (since taxable + gst === netAfterDiscount)
+  const grandTotal = Math.round((taxableAmount + gstAmount + deliveryFee) * 100) / 100;
 
   // 7. Settlement and balance determination
-  const statusStr = String(record.status || '').toUpperCase();
-  const creditStatusStr = String(record.credit_status || '').toLowerCase();
+  const statusStr = String(input.status || '').toUpperCase();
+  const creditStatusStr = String(input.credit_status || '').toLowerCase();
   const isSettled =
     statusStr === 'COMPLETED' ||
     statusStr === 'PAID' ||
@@ -210,24 +312,26 @@ export function getOrderTotals(record: any): OrderTotals {
   } else if (isCancelled) {
     paid = Math.round(
       Number(
-        record.amount_paid ??
-          record.deposit_amount ??
-          record.deposit ??
-          record.cash_received ??
-          record.amount_received ??
-          0
+        input.amount_paid ??
+        input.deposit_amount ??
+        input.deposit ??
+        input.cash_received ??
+        input.amount_received ??
+        input.paid ??
+        0
       ) * 100
     ) / 100;
     balance = 0;
   } else {
     paid = Math.round(
       Number(
-        record.amount_paid ??
-          record.deposit_amount ??
-          record.deposit ??
-          record.cash_received ??
-          record.amount_received ??
-          0
+        input.amount_paid ??
+        input.deposit_amount ??
+        input.deposit ??
+        input.cash_received ??
+        input.amount_received ??
+        input.paid ??
+        0
       ) * 100
     ) / 100;
     balance = Math.max(0, Math.round((grandTotal - paid) * 100) / 100);
@@ -235,26 +339,37 @@ export function getOrderTotals(record: any): OrderTotals {
 
   return {
     subtotal,
-    discount,
+    manualDiscount,
+    couponDiscount,
+    discount: totalDiscount,
     discountType,
     discountValue,
-    taxable,
+    taxableAmount,
+    taxable: taxableAmount,
+    taxMode,
     gstPercent,
     gstRate: gstPercent,
     gstAmount,
+    gstTotal: gstAmount,
     gst: gstAmount,
     cgst,
     sgst,
+    delivery: deliveryFee,
     deliveryFee,
     grandTotal,
     total: grandTotal,
     paid,
     balance,
+    isGst: isGstExplicit && gstPercent > 0,
   };
 }
 
+export function getOrderTotals(record: any): OrderTotals {
+  return calculateBillTotals(record);
+}
+
 export function calculateOrderTotals(record: any): OrderTotals {
-  return getOrderTotals(record);
+  return calculateBillTotals(record);
 }
 
 export function numberToWords(num: number): string {
