@@ -89,15 +89,6 @@ export default function InvoiceModal({
         ...normalizeOrder(order),
         id: orderId,
         invoice_no: orderId,
-        subtotal: subtotal || items.reduce((sum: number, i: any) => sum + Number(i.price || i.snapshot_price || 0) * Number(i.qty || i.quantity || 1), 0),
-        discount_amount: Number(order.discount ?? order.discount_amount ?? 0),
-        discount_value: Number(order.discountValue ?? order.discount_value ?? 0),
-        discount_type: order.discountType || order.discount_type || "FIXED",
-        is_gst: isGst,
-        gst_rate: Number(order.gstPercentage ?? order.gst_percentage ?? order.gst_rate ?? (isGst ? 18 : 0)),
-        gst_percentage: Number(order.gstPercentage ?? order.gst_percentage ?? order.gst_rate ?? (isGst ? 18 : 0)),
-        gst_amount: Number(order.gstAmount ?? order.gst_amount ?? 0),
-        delivery_fee: Number(order.deliveryFee ?? order.delivery_fee ?? 0),
         payment_mode: paymentMode,
       }
     : null;

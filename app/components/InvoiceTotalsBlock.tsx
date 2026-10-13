@@ -18,9 +18,9 @@ export default function InvoiceTotalsBlock({
   totals,
   className = "",
 }: InvoiceTotalsBlockProps) {
-  const discountLabel =
+  const manualDiscountLabel =
     totals.discountType === "PERCENT"
-      ? `Discount (${totals.discountValue}%)`
+      ? `Manual Discount (${totals.discountValue}%)`
       : "Manual Discount";
 
   return (
@@ -28,16 +28,36 @@ export default function InvoiceTotalsBlock({
       {/* Subtotal */}
       <div className="flex justify-between items-center text-zinc-600">
         <span>Subtotal</span>
-        <span className="font-mono text-zinc-900 font-medium">
+        <span className="font-mono text-zinc-900 font-medium tabular-nums whitespace-nowrap">
           ₹{formatINR(totals.subtotal)}
         </span>
       </div>
 
-      {/* Discount (if > 0) */}
-      {totals.discount > 0 && (
+      {/* Manual Discount (if > 0) */}
+      {totals.manualDiscount > 0 && (
         <div className="flex justify-between items-center text-[#F500A0]">
-          <span className="font-medium">{discountLabel}</span>
-          <span className="font-mono font-medium">
+          <span className="font-medium">{manualDiscountLabel}</span>
+          <span className="font-mono font-medium tabular-nums whitespace-nowrap">
+            -₹{formatINR(totals.manualDiscount)}
+          </span>
+        </div>
+      )}
+
+      {/* Coupon Discount (if > 0) */}
+      {totals.couponDiscount > 0 && (
+        <div className="flex justify-between items-center text-[#F500A0]">
+          <span className="font-medium">Coupon Discount</span>
+          <span className="font-mono font-medium tabular-nums whitespace-nowrap">
+            -₹{formatINR(totals.couponDiscount)}
+          </span>
+        </div>
+      )}
+
+      {/* Fallback discount if neither manual nor coupon split is separate but total discount > 0 */}
+      {totals.manualDiscount === 0 && totals.couponDiscount === 0 && totals.discount > 0 && (
+        <div className="flex justify-between items-center text-[#F500A0]">
+          <span className="font-medium">Discount</span>
+          <span className="font-mono font-medium tabular-nums whitespace-nowrap">
             -₹{formatINR(totals.discount)}
           </span>
         </div>
@@ -47,25 +67,31 @@ export default function InvoiceTotalsBlock({
       {totals.gstAmount > 0 && (
         <>
           <div className="flex justify-between items-center text-[11px] text-zinc-500">
+            <span>Taxable Amount</span>
+            <span className="font-mono tabular-nums whitespace-nowrap">
+              ₹{formatINR(totals.taxableAmount)}
+            </span>
+          </div>
+          <div className="flex justify-between items-center text-[11px] text-zinc-500">
             <span>CGST @ {(totals.gstPercent / 2)}%</span>
-            <span className="font-mono">
+            <span className="font-mono tabular-nums whitespace-nowrap">
               +₹{formatINR(totals.cgst)}
             </span>
           </div>
           <div className="flex justify-between items-center text-[11px] text-zinc-500">
             <span>SGST @ {(totals.gstPercent / 2)}%</span>
-            <span className="font-mono">
+            <span className="font-mono tabular-nums whitespace-nowrap">
               +₹{formatINR(totals.sgst)}
             </span>
           </div>
         </>
       )}
 
-      {/* Delivery (if > 0) */}
+      {/* Delivery Fee (if > 0) */}
       {totals.deliveryFee > 0 && (
         <div className="flex justify-between items-center text-zinc-600">
           <span>Delivery</span>
-          <span className="font-mono text-zinc-900 font-medium">
+          <span className="font-mono text-zinc-900 font-medium tabular-nums whitespace-nowrap">
             ₹{formatINR(totals.deliveryFee)}
           </span>
         </div>
@@ -76,7 +102,7 @@ export default function InvoiceTotalsBlock({
         <span className="text-sm font-black uppercase tracking-wider text-[#F500A0]">
           {totals.gstAmount > 0 ? "TOTAL (incl. GST)" : "TOTAL"}
         </span>
-        <span className="font-mono font-black text-base text-[#F500A0]">
+        <span className="font-mono font-black text-base text-[#F500A0] tabular-nums whitespace-nowrap">
           ₹{formatINR(totals.grandTotal)}
         </span>
       </div>

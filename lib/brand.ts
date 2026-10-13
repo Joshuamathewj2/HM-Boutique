@@ -35,6 +35,11 @@ export const DEFAULT_SHOP_PROFILE: ShopProfile = {
 
 export const DEFAULT_LOGO = '/logo.png'
 
+export const DEFAULT_INVOICE_TERMS: string[] = [
+  "Thank you for choosing HM Boutique.",
+  "Please carry this receipt when collecting your order.",
+];
+
 const readCachedProfile = (): ShopProfile => {
   if (typeof window === 'undefined') return DEFAULT_SHOP_PROFILE
   try {

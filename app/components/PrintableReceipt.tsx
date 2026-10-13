@@ -1,15 +1,19 @@
 "use client";
 
 import React from "react";
-import { BRAND_EN, BRAND_ADDRESS, BRAND_PHONE_DISPLAY, BRAND_EMAIL } from "@/lib/brand";
+import { BRAND_EN, BRAND_ADDRESS, BRAND_PHONE_DISPLAY, BRAND_EMAIL, DEFAULT_INVOICE_TERMS } from "@/lib/brand";
 import { formatINR } from "@/lib/money";
 import { getOrderTotals, numberToWords } from "@/lib/orderTotals";
 import InvoiceTotalsBlock from "./InvoiceTotalsBlock";
 
 export interface PrintableReceiptItem {
   id?: string;
-  snapshot_name: string;
-  snapshot_price: number | string;
+  snapshot_name?: string;
+  name?: string;
+  item_name?: string;
+  snapshot_price?: number | string;
+  price?: number | string;
+  rate?: number | string;
   quantity: number;
 }
 
@@ -25,8 +29,10 @@ export interface PrintableReceiptProps {
     payment_method?: string;
     subtotal?: number;
     discount_amount?: number;
+    manual_discount_amount?: number;
     discount_value?: number;
     discount_type?: string;
+    coupon_discount_amount?: number;
     is_gst?: boolean;
     gst_rate?: number;
     gst_percentage?: number;
@@ -47,7 +53,7 @@ export interface PrintableReceiptProps {
     invoice_no?: string;
     invoice_number?: string;
     invoiceNo?: string;
-    items: PrintableReceiptItem[];
+    items?: PrintableReceiptItem[];
   };
   paper?: string;
   size?: string;
@@ -93,7 +99,7 @@ export default function PrintableReceipt({ order, paper, size }: PrintableReceip
         year: "numeric",
       });
 
-  const displayInvoiceId = (order.invoice_no || order.invoice_number || order.invoiceNo || order.id || "").replace(/^DEP-/i, "INV-");
+  const displayInvoiceId = order.invoice_no || order.invoice_number || order.invoiceNo || order.id || "";
 
   const formattedTime = new Date(order.created_at || new Date()).toLocaleTimeString("en-IN", {
     hour: "2-digit",
@@ -114,6 +120,13 @@ export default function PrintableReceipt({ order, paper, size }: PrintableReceip
           : order.payment_method === "SPLIT" || order.payment_mode === "SPLIT"
             ? "SPLIT PAYMENT"
             : "PAID BY CASH";
+
+  const receiptItems =
+    Array.isArray(order.items) && order.items.length > 0
+      ? order.items
+      : Array.isArray((order as any).order_items) && (order as any).order_items.length > 0
+      ? (order as any).order_items
+      : [];
 
   if (paper === "thermal") {
     return (
@@ -148,7 +161,7 @@ export default function PrintableReceipt({ order, paper, size }: PrintableReceip
         {/* Thermal Receipt Layout */}
         <div className="text-center pb-3 border-b border-dashed border-black/40 mb-3">
           <h1 className="text-xl font-bold tracking-tight">HM BOUTIQUE</h1>
-          <p className="text-[11px] mt-1 font-semibold">HM School of Fashion Designing & Tailoring</p>
+          <p className="text-[11px] mt-1 font-semibold">HM School of Fashion Designing &amp; Tailoring</p>
           <p className="text-[11px]">No: 82, Mahalakshmi Nagar, 2nd Main Road</p>
           <p className="text-[11px]">Adambakkam, Chennai - 600088</p>
           <p className="text-[11px]">Ph: +91 80560 86113</p>
@@ -169,92 +182,121 @@ export default function PrintableReceipt({ order, paper, size }: PrintableReceip
             <span className="font-semibold text-right">{order.customer_name || "Counter Sale"}</span>
           </div>
         </div>
-        <div className="text-[11px] w-full">
-          <table className="w-full text-left border-collapse">
+
+        {/* Item Rows with name, qty, rate, line total */}
+        <div className="text-[11px] w-full mb-2">
+          <table className="w-full text-left border-collapse table-fixed">
             <thead>
-              <tr className="border-b border-dashed border-black/40">
-                <th className="py-1 font-bold">Item</th>
-                <th className="py-1 font-bold text-center">Qty</th>
-                <th className="py-1 font-bold text-right">Amt</th>
+              <tr className="border-b border-dashed border-black/60 text-[10px]">
+                <th className="py-1 font-bold text-left w-[44%]">Item</th>
+                <th className="py-1 font-bold text-center w-[16%]">Qty</th>
+                <th className="py-1 font-bold text-right w-[20%]">Rate</th>
+                <th className="py-1 font-bold text-right w-[20%]">Amt</th>
               </tr>
             </thead>
-            <tbody className="align-top">
-              {order.items.map((item, i) => (
-                <tr key={i} className="border-b border-dashed border-black/15">
-                  <td className="py-1.5 pr-1">
-                    <div className="font-semibold">{item.snapshot_name}</div>
-                  </td>
-                  <td className="py-1.5 text-center">{item.quantity}</td>
-                  <td className="py-1.5 text-right font-medium">{(item.quantity * Number(item.snapshot_price)).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                </tr>
-              ))}
+            <tbody className="align-top divide-y divide-dashed divide-black/20">
+              {receiptItems.map((item, i) => {
+                const unitPrice = Number(item.snapshot_price ?? (item as any).price ?? (item as any).rate ?? 0);
+                const qty = Number(item.quantity ?? (item as any).qty ?? 1);
+                const lineTotal = unitPrice * qty;
+                const name = item.snapshot_name || (item as any).name || (item as any).product_name || "Item";
+                return (
+                  <tr key={i} className="border-b border-dashed border-black/20 text-[10px]">
+                    <td className="py-1 pr-1 break-words font-semibold leading-tight">{name}</td>
+                    <td className="py-1 text-center tabular-nums">{qty}</td>
+                    <td className="py-1 text-right tabular-nums whitespace-nowrap">{unitPrice.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                    <td className="py-1 text-right font-semibold tabular-nums whitespace-nowrap">{lineTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
-        <div className="text-[11px] py-3 border-b border-dashed border-black/40 mb-3 space-y-1.5">
+
+        {/* Financial Split-Up */}
+        <div className="text-[11px] py-2 border-b border-dashed border-black/60 mb-2 space-y-1">
           <div className="flex justify-between">
             <span>Subtotal:</span>
-            <span>{totals.subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+            <span className="tabular-nums">₹{totals.subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
           </div>
-          {totals.discount > 0 && (
-            <div className="flex justify-between text-black">
+          {totals.manualDiscount > 0 && (
+            <div className="flex justify-between">
+              <span>Manual Discount:</span>
+              <span className="tabular-nums">-₹{totals.manualDiscount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+            </div>
+          )}
+          {totals.couponDiscount > 0 && (
+            <div className="flex justify-between">
+              <span>Coupon Discount:</span>
+              <span className="tabular-nums">-₹{totals.couponDiscount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+            </div>
+          )}
+          {totals.discount > 0 && totals.manualDiscount === 0 && totals.couponDiscount === 0 && (
+            <div className="flex justify-between">
               <span>Discount:</span>
-              <span>-{totals.discount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+              <span className="tabular-nums">-₹{totals.discount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+            </div>
+          )}
+          {totals.gstAmount > 0 && totals.taxableAmount > 0 && (
+            <div className="flex justify-between">
+              <span>Taxable Amount:</span>
+              <span className="tabular-nums">₹{totals.taxableAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
             </div>
           )}
           {totals.gstAmount > 0 && (
             <>
               <div className="flex justify-between">
                 <span>CGST @ {(totals.gstPercent / 2)}%:</span>
-                <span>+{totals.cgst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                <span className="tabular-nums">+₹{totals.cgst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
               </div>
               <div className="flex justify-between">
                 <span>SGST @ {(totals.gstPercent / 2)}%:</span>
-                <span>+{totals.sgst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                <span className="tabular-nums">+₹{totals.sgst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
               </div>
             </>
           )}
           {totals.deliveryFee > 0 && (
             <div className="flex justify-between">
-              <span>Delivery:</span>
-              <span>{totals.deliveryFee.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+              <span>Delivery Fee:</span>
+              <span className="tabular-nums">+₹{totals.deliveryFee.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
             </div>
           )}
-          <div className="flex justify-between text-[14px] font-black mt-2 pt-1 border-t border-dashed border-black/40">
+          <div className="flex justify-between text-[13px] font-black mt-1.5 pt-1 border-t border-dashed border-black/60">
             <span>{totals.gstAmount > 0 ? "TOTAL (incl. GST):" : "TOTAL:"}</span>
-            <span>₹{totals.grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+            <span className="tabular-nums">₹{totals.grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
           </div>
         </div>
 
         {/* Payment & Balance breakdown for Advance and Credit */}
         {(isCredit || isAdvance) && (
-          <div className="text-[11px] py-2 border-b border-dashed border-black/40 mb-3 space-y-1">
+          <div className="text-[11px] py-1.5 border-b border-dashed border-black/60 mb-2 space-y-1">
             <div className="flex justify-between">
               <span>{isCredit ? (isSettled ? "Amount Paid:" : "Paid:") : (isSettled ? "Amount Paid:" : "Cash Received:")}</span>
-              <span className="font-bold">₹{totals.paid.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+              <span className="font-bold tabular-nums">₹{totals.paid.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
             </div>
             <div className="flex justify-between">
               <span>Balance Due:</span>
-              <span className={`font-bold ${totals.balance === 0 ? "text-emerald-700" : "text-rose-700"}`}>
+              <span className="font-bold tabular-nums">
                 ₹{totals.balance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
               </span>
             </div>
           </div>
         )}
 
-        <div className="text-[10px] space-y-1 mb-3">
-          <p className="font-semibold text-center border-b border-dashed border-black/20 pb-2 mb-2">{paymentLabel}</p>
-          <p className="text-[9px] uppercase tracking-wider text-center text-gray-700">{numberToWords(totals.grandTotal)}</p>
+        <div className="text-[10px] space-y-1 mb-2">
+          <p className="font-semibold text-center border-b border-dashed border-black/30 pb-1 mb-1">{paymentLabel}</p>
+          <p className="text-[9px] uppercase tracking-wider text-center text-black leading-snug">{numberToWords(totals.grandTotal)}</p>
         </div>
 
         {/* Terms & Notes for Thermal */}
-        <div className="text-[9px] text-gray-700 space-y-0.5 mb-2 text-left border-t border-dashed border-black/20 pt-2">
-          <p className="font-semibold text-black">Terms &amp; Notes:</p>
-          <p>• Goods once sold can only be exchanged within 7 days.</p>
-          <p>• Custom-stitched garments are non-returnable.</p>
+        <div className="text-[9px] text-black space-y-0.5 mb-2 text-left border-t border-dashed border-black/30 pt-1.5">
+          <p className="font-bold">Terms &amp; Notes:</p>
+          {DEFAULT_INVOICE_TERMS.map((term, idx) => (
+            <p key={idx}>• {term}</p>
+          ))}
         </div>
 
-        <div className="text-[11px] text-center pt-2 font-semibold italic">
+        <div className="text-[10px] text-center pt-1 font-semibold italic">
           Thank you for your business!
         </div>
       </div>
@@ -262,7 +304,7 @@ export default function PrintableReceipt({ order, paper, size }: PrintableReceip
   }
 
   return (
-    <div className="invoice-sheet w-full max-w-[210mm] mx-auto bg-white p-8 font-sans text-black border border-zinc-200 rounded-lg print:border-none print:p-0 print:m-0 print:max-w-none">
+    <div className="invoice-sheet w-full max-w-[210mm] mx-auto bg-white p-3.5 sm:p-6 md:p-8 font-sans text-black border border-zinc-200 rounded-lg print:border-none print:p-0 print:m-0 print:max-w-none">
       <style>{`
         @media print {
           @page {
@@ -284,7 +326,7 @@ export default function PrintableReceipt({ order, paper, size }: PrintableReceip
       `}</style>
 
       {/* Header */}
-      <div className="flex justify-between items-start border-b border-zinc-200 pb-5">
+      <div className="flex flex-col sm:flex-row justify-between items-start gap-4 border-b border-zinc-200 pb-5">
         <div>
           <h1 className="text-xl font-black tracking-tight text-zinc-900 uppercase">
             {BRAND_EN}
@@ -301,7 +343,7 @@ export default function PrintableReceipt({ order, paper, size }: PrintableReceip
             </p>
           )}
         </div>
-        <div className="text-right">
+        <div className="sm:text-right">
           <span
             className={`inline-block px-3 py-1 text-xs font-black rounded uppercase tracking-wider ${
               isUnsettledCredit
@@ -354,39 +396,68 @@ export default function PrintableReceipt({ order, paper, size }: PrintableReceip
         </div>
       </div>
 
-      {/* Items Table with Fixed Column Widths: Item left-aligned, Qty/Rate centered, Total right-aligned */}
+      {/* Items Section: Mobile Stacked Layout (<= 640px) & Desktop Table */}
       <div className="py-4">
-        <table className="w-full text-left text-xs border-collapse table-fixed">
+        {/* Mobile View: Item Name stacked above Qty / Rate / Total with zero horizontal overflow */}
+        <div className="sm:hidden print:hidden divide-y divide-zinc-200 border-t border-b border-zinc-200">
+          {receiptItems.map((item, index) => {
+            const unitPrice = Number(item.snapshot_price ?? (item as any).price ?? (item as any).rate ?? 0);
+            const qty = Number(item.quantity ?? (item as any).qty ?? 1);
+            const itemTotal = unitPrice * qty;
+            const name = item.snapshot_name || (item as any).name || (item as any).product_name || "Item";
+            return (
+              <div key={index} className="py-2.5 space-y-1.5">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="font-semibold text-xs text-zinc-900 leading-snug break-words">
+                    {index + 1}. {name}
+                  </span>
+                  <span className="font-mono font-bold text-xs text-zinc-900 tabular-nums whitespace-nowrap">
+                    ₹{formatINR(itemTotal)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-[11px] text-zinc-600 font-mono">
+                  <span>Qty: <strong className="text-zinc-800 font-medium">{qty}</strong></span>
+                  <span className="tabular-nums">Rate: ₹{formatINR(unitPrice)}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Desktop / Print Table with fixed layout, right-aligned numbers */}
+        <table className="hidden sm:table print:table w-full text-left text-xs border-collapse table-fixed">
           <thead>
             <tr className="border-b border-zinc-200 text-[10px] font-bold text-zinc-500 uppercase tracking-wider bg-gray-50/50">
               <th className="py-2.5 px-2 text-center w-[6%]">#</th>
-              <th className="py-2.5 px-2 text-left w-[46%]">Item Description</th>
-              <th className="py-2.5 px-2 text-center w-[14%]">Qty</th>
-              <th className="py-2.5 px-2 text-center w-[16%]">Rate (₹)</th>
-              <th className="py-2.5 px-2 text-right w-[18%]">Total (₹)</th>
+              <th className="py-2.5 px-2 text-left w-[44%]">Item Description</th>
+              <th className="py-2.5 px-2 text-center w-[12%]">Qty</th>
+              <th className="py-2.5 px-2 text-right w-[18%]">Rate (₹)</th>
+              <th className="py-2.5 px-2 text-right w-[20%]">Total (₹)</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-100">
-            {order.items.map((item, index) => {
-              const unitPrice = Number(item.snapshot_price) || 0;
-              const itemTotal = unitPrice * (item.quantity || 1);
+            {receiptItems.map((item, index) => {
+              const unitPrice = Number(item.snapshot_price ?? (item as any).price ?? (item as any).rate ?? 0);
+              const qty = Number(item.quantity ?? (item as any).qty ?? 1);
+              const itemTotal = unitPrice * qty;
+              const name = item.snapshot_name || (item as any).name || (item as any).product_name || "Item";
               return (
                 <tr key={index} className="border-b border-zinc-100">
                   <td className="py-2.5 px-2 text-center text-zinc-400 font-mono w-[6%]">
                     {index + 1}
                   </td>
-                  <td className="py-2.5 px-2 text-left w-[46%]">
+                  <td className="py-2.5 px-2 text-left w-[44%] break-words">
                     <div className="font-medium text-zinc-900">
-                      {item.snapshot_name}
+                      {name}
                     </div>
                   </td>
-                  <td className="py-2.5 px-2 text-center text-zinc-800 font-medium w-[14%]">
-                    {item.quantity}
+                  <td className="py-2.5 px-2 text-center text-zinc-800 font-medium w-[12%]">
+                    {qty}
                   </td>
-                  <td className="py-2.5 px-2 text-center font-mono text-zinc-600 w-[16%]">
+                  <td className="py-2.5 px-2 text-right font-mono tabular-nums whitespace-nowrap text-zinc-600 w-[18%]">
                     ₹{formatINR(unitPrice)}
                   </td>
-                  <td className="py-2.5 px-2 text-right font-mono font-semibold text-zinc-900 w-[18%]">
+                  <td className="py-2.5 px-2 text-right font-mono font-semibold tabular-nums whitespace-nowrap text-zinc-900 w-[20%]">
                     ₹{formatINR(itemTotal)}
                   </td>
                 </tr>
@@ -397,35 +468,35 @@ export default function PrintableReceipt({ order, paper, size }: PrintableReceip
       </div>
 
       {/* Totals & Breakdown: Accounting Layout */}
-      <div className="border-t border-zinc-200 pt-4 flex flex-col sm:flex-row justify-between items-start gap-8 text-xs">
+      <div className="border-t border-zinc-200 pt-4 flex flex-col sm:flex-row justify-between items-start gap-6 sm:gap-8 text-xs">
         {/* Left Side: Words Breakdown & Terms */}
-        <div className="space-y-3.5 max-w-sm flex-1">
+        <div className="space-y-3.5 max-w-sm flex-1 w-full">
           <div>
-            <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">
+            <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
               AMOUNT IN WORDS
             </div>
-            <div className="text-xs font-semibold italic text-slate-900">
+            <div className="text-xs font-semibold italic text-slate-900 leading-relaxed break-words">
               {numberToWords(totals.grandTotal)}
             </div>
           </div>
 
           {/* Payment & Balance lines for credit/advance invoices */}
           {(isCredit || isAdvance) && (
-            <div className="text-xs space-y-1 pt-1">
-              <div>
-                <span className="text-slate-500 text-xs">
+            <div className="text-xs space-y-2 pt-2 border-t border-zinc-100">
+              <div className="flex justify-between items-center py-0.5">
+                <span className="text-slate-600 font-medium">
                   {isCredit
-                    ? (isSettled ? "Amount Paid / Received: " : "Amount Paid: ")
-                    : (isSettled ? "Amount Paid / Received: " : "Cash Received: ")}
+                    ? (isSettled ? "Amount Paid / Received:" : "Amount Paid:")
+                    : (isSettled ? "Amount Paid / Received:" : "Cash Received:")}
                 </span>
-                <span className="font-bold text-slate-900 font-mono">
+                <span className="font-bold text-slate-900 font-mono tabular-nums">
                   ₹{formatINR(totals.paid)}
                 </span>
               </div>
-              <div>
-                <span className="text-slate-500 text-xs">Balance Due: </span>
+              <div className="flex justify-between items-center py-0.5">
+                <span className="text-slate-600 font-medium">Balance Due:</span>
                 <span
-                  className={`font-bold font-mono ${
+                  className={`font-bold font-mono tabular-nums ${
                     totals.balance === 0 ? "text-emerald-600" : "text-rose-600"
                   }`}
                 >
@@ -436,10 +507,11 @@ export default function PrintableReceipt({ order, paper, size }: PrintableReceip
           )}
 
           {/* Terms & Notes */}
-          <div className="text-[11px] text-slate-500 leading-relaxed pt-1 space-y-0.5">
+          <div className="text-[11px] text-slate-500 leading-relaxed pt-2 space-y-0.5 border-t border-zinc-100">
             <p className="font-semibold text-slate-700 mb-0.5">Terms &amp; Notes:</p>
-            <p>• Goods once sold can only be exchanged within 7 days with this invoice.</p>
-            <p>• Custom-stitched and altered garments are made to order and non-returnable.</p>
+            {DEFAULT_INVOICE_TERMS.map((term, idx) => (
+              <p key={idx}>• {term}</p>
+            ))}
           </div>
         </div>
 
@@ -454,3 +526,4 @@ export default function PrintableReceipt({ order, paper, size }: PrintableReceip
     </div>
   );
 }
+
