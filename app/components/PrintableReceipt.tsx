@@ -121,12 +121,13 @@ export default function PrintableReceipt({ order, paper, size }: PrintableReceip
             ? "SPLIT PAYMENT"
             : "PAID BY CASH";
 
-  const receiptItems =
+  const receiptItems: PrintableReceiptItem[] =
     Array.isArray(order.items) && order.items.length > 0
-      ? order.items
+      ? (order.items as PrintableReceiptItem[])
       : Array.isArray((order as any).order_items) && (order as any).order_items.length > 0
-      ? (order as any).order_items
+      ? ((order as any).order_items as PrintableReceiptItem[])
       : [];
+
 
   if (paper === "thermal") {
     return (
