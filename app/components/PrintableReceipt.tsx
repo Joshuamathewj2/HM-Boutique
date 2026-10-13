@@ -185,33 +185,54 @@ export default function PrintableReceipt({ order, paper, size }: PrintableReceip
 
         {/* Item Rows with name, qty, rate, line total */}
         <div className="text-[11px] w-full mb-2">
-          <table className="w-full text-left border-collapse table-fixed">
-            <thead>
-              <tr className="border-b border-dashed border-black/60 text-[10px]">
-                <th className="py-1 font-bold text-left w-[44%]">Item</th>
-                <th className="py-1 font-bold text-center w-[16%]">Qty</th>
-                <th className="py-1 font-bold text-right w-[20%]">Rate</th>
-                <th className="py-1 font-bold text-right w-[20%]">Amt</th>
-              </tr>
-            </thead>
-            <tbody className="align-top divide-y divide-dashed divide-black/20">
+          {size === "58" ? (
+            <div className="divide-y divide-dashed divide-black/30 border-t border-b border-dashed border-black/60">
               {receiptItems.map((item, i) => {
                 const unitPrice = Number(item.snapshot_price ?? (item as any).price ?? (item as any).rate ?? 0);
                 const qty = Number(item.quantity ?? (item as any).qty ?? 1);
                 const lineTotal = unitPrice * qty;
                 const name = item.snapshot_name || (item as any).name || (item as any).product_name || "Item";
                 return (
-                  <tr key={i} className="border-b border-dashed border-black/20 text-[10px]">
-                    <td className="py-1 pr-1 break-words font-semibold leading-tight">{name}</td>
-                    <td className="py-1 text-center tabular-nums">{qty}</td>
-                    <td className="py-1 text-right tabular-nums whitespace-nowrap">{unitPrice.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                    <td className="py-1 text-right font-semibold tabular-nums whitespace-nowrap">{lineTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                  </tr>
+                  <div key={i} className="py-1 space-y-0.5 text-[10px]">
+                    <div className="font-semibold break-words leading-tight">{name}</div>
+                    <div className="flex justify-between items-center tabular-nums">
+                      <span>{qty} × ₹{unitPrice.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                      <span className="font-bold">₹{lineTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                    </div>
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
+            </div>
+          ) : (
+            <table className="w-full text-left border-collapse table-fixed">
+              <thead>
+                <tr className="border-b border-dashed border-black/60 text-[10px]">
+                  <th className="py-1 font-bold text-left w-[44%]">Item</th>
+                  <th className="py-1 font-bold text-center w-[14%]">Qty</th>
+                  <th className="py-1 font-bold text-right w-[20%]">Rate</th>
+                  <th className="py-1 font-bold text-right w-[22%]">Amt</th>
+                </tr>
+              </thead>
+              <tbody className="align-top divide-y divide-dashed divide-black/20">
+                {receiptItems.map((item, i) => {
+                  const unitPrice = Number(item.snapshot_price ?? (item as any).price ?? (item as any).rate ?? 0);
+                  const qty = Number(item.quantity ?? (item as any).qty ?? 1);
+                  const lineTotal = unitPrice * qty;
+                  const name = item.snapshot_name || (item as any).name || (item as any).product_name || "Item";
+                  return (
+                    <tr key={i} className="border-b border-dashed border-black/20 text-[10px]">
+                      <td className="py-1 pr-1 break-words font-semibold leading-tight">{name}</td>
+                      <td className="py-1 text-center tabular-nums">{qty}</td>
+                      <td className="py-1 text-right tabular-nums whitespace-nowrap">{unitPrice.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                      <td className="py-1 text-right font-semibold tabular-nums whitespace-nowrap">{lineTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
+
 
         {/* Financial Split-Up */}
         <div className="text-[11px] py-2 border-b border-dashed border-black/60 mb-2 space-y-1">
