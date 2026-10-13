@@ -127,7 +127,7 @@ export default async function InvoicePage({
                   ? "A5 portrait"
                   : "A4 portrait"
             };
-            margin: ${paper === "thermal" ? "3mm" : size === "a5" ? "10mm" : "12mm"};
+            margin: ${paper === "thermal" ? "0mm" : size === "a5" ? "10mm" : "12mm"};
           }
           html, body {
             background: #ffffff !important;
