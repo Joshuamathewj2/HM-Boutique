@@ -44,3 +44,6 @@ seed.sql
 next-env.d.ts
 
 # For the Plot
+
+.playwright-mcp/
+screenshots/
