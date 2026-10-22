@@ -462,6 +462,8 @@ export default function POSBilling() {
   const [selectedAdvance, setSelectedAdvance] = useState<AdvanceOrderWithRelations | null>(null);
   const [advanceViewMode, setAdvanceViewMode] = useState<"view" | "receive" | null>(null);
   const [receivePaymentMode, setReceivePaymentMode] = useState<OrderPaymentMode>("CASH");
+  // Cash portion of the balance when receivePaymentMode === "SPLIT" (rest is GPay)
+  const [receiveSplitCash, setReceiveSplitCash] = useState<number>(0);
   const [receiveDiscountValue, setReceiveDiscountValue] = useState<number>(0);
   const [receiveDiscountType, setReceiveDiscountType] = useState<"fixed" | "percent">("fixed");
   const [receiveIsGst, setReceiveIsGst] = useState<boolean>(false);
@@ -1237,11 +1239,20 @@ export default function POSBilling() {
     setCatalog((prev) => prev.filter((c) => c.id !== id));
   };
 
+  // Coupon amount tracks the live cart subtotal, not the subtotal at the moment it was applied
+  const cartSubtotal = items.reduce(
+    (sum, i) => sum + (Number(i.price) || 0) * (Number(i.qty) || 0),
+    0,
+  );
+  const liveCouponDiscount = appliedCoupon
+    ? Math.round(cartSubtotal * Number(appliedCoupon.percentage || 0)) / 100
+    : 0;
+
   const currentBillTotals = calculateBillTotals({
     items,
     discountType: discountType === "percent" ? "PERCENT" : "FIXED",
     discountValue: Number(discountValue) || 0,
-    couponDiscount: appliedCoupon ? Number(appliedCoupon.discountAmount) || 0 : 0,
+    couponDiscount: liveCouponDiscount,
     isGst: applyGST,
     gstPercentage: applyGST ? Number(gstPercentage) || 0 : 0,
     taxMode,
@@ -1362,7 +1373,7 @@ export default function POSBilling() {
     setAdvDeposit("");
     setAdvDeliveryDate("");
     setAdvNotes("");
-    setAdvDepositPaymentMode(paymentMode);
+    setAdvDepositPaymentMode(paymentMode === "GPAY" ? "GPAY" : "CASH");
     setShowAdvanceSaveModal(true);
   };
 
@@ -1398,6 +1409,8 @@ export default function POSBilling() {
         discountAmount: calculatedDiscount,
         discountType: discountType === "percent" ? "PERCENT" : "FIXED",
         discountValue: Number(discountValue) || 0,
+        couponCode: appliedCoupon && couponDiscount > 0 ? appliedCoupon.code : null,
+        couponDiscount,
         deliveryFee: Number(deliveryFee) || 0,
         items: items.map((i) => ({
           product_id: i.product_id || null,
@@ -1435,6 +1448,7 @@ export default function POSBilling() {
       setCashReceived(0);
       setSplitCash(0);
       setSplitGpay(0);
+      handleRemoveCoupon();
       setShowAdvanceSaveModal(false);
       await fetchData();
       try {
@@ -1472,6 +1486,7 @@ export default function POSBilling() {
     setSelectedAdvance(adv);
     setAdvanceViewMode("receive");
     setReceivePaymentMode("CASH");
+    setReceiveSplitCash(0);
     setReceiveDiscountValue(0);
     setReceiveDiscountType("fixed");
     const advTotals = getOrderTotals(adv);
@@ -1506,6 +1521,29 @@ export default function POSBilling() {
       const advancePaidEarlier = advTotals.paid;
       const finalAmountPaidNow = advTotals.balance;
 
+      // Combine how the deposit and the balance were paid so the final invoice shows the
+      // real Cash / GPay split (e.g. deposit by GPay + balance in cash => SPLIT).
+      const depositMode = String(selectedAdvance.deposit_payment_mode || "CASH").toUpperCase();
+      const depositCash =
+        depositMode === "SPLIT"
+          ? Number(selectedAdvance.deposit_split_cash) || 0
+          : depositMode === "GPAY" ? 0 : advancePaidEarlier;
+      const depositGpay =
+        depositMode === "SPLIT"
+          ? Number(selectedAdvance.deposit_split_gpay) || 0
+          : depositMode === "GPAY" ? advancePaidEarlier : 0;
+      const balanceCash =
+        receivePaymentMode === "SPLIT"
+          ? Math.min(finalAmountPaidNow, Math.max(0, Number(receiveSplitCash) || 0))
+          : receivePaymentMode === "GPAY" ? 0 : finalAmountPaidNow;
+      const balanceGpay = Math.max(0, Math.round((finalAmountPaidNow - balanceCash) * 100) / 100);
+      const totalCashPaid = Math.round((depositCash + balanceCash) * 100) / 100;
+      const totalGpayPaid = Math.round((depositGpay + balanceGpay) * 100) / 100;
+      const finalPaymentMode: OrderPaymentMode =
+        totalCashPaid > 0 && totalGpayPaid > 0 ? "SPLIT" : totalGpayPaid > 0 ? "GPAY" : "CASH";
+      const finalSplitCash = finalPaymentMode === "SPLIT" ? totalCashPaid : 0;
+      const finalSplitGpay = finalPaymentMode === "SPLIT" ? totalGpayPaid : 0;
+
       const advItems = selectedAdvance.items.map((i, idx) => ({
         id: `oi-${invoiceId}-${idx}`,
         product_id: i.product_id || null,
@@ -1529,8 +1567,12 @@ export default function POSBilling() {
         discountType: advTotals.discountType,
         discountValue: advTotals.discountValue,
         discountAmount: cappedDiscount,
+        couponCode: advTotals.couponDiscount > 0 ? selectedAdvance.coupon_code || null : null,
+        couponDiscount: advTotals.couponDiscount,
         deliveryFee: advTotals.deliveryFee,
-        paymentMode: receivePaymentMode,
+        paymentMode: finalPaymentMode,
+        splitCash: finalSplitCash,
+        splitGpay: finalSplitGpay,
         billDate: nowIso,
       });
 
@@ -1553,6 +1595,10 @@ export default function POSBilling() {
         discount_amount: cappedDiscount,
         discountType: advTotals.discountType,
         discountValue: advTotals.discountValue,
+        manualDiscount: advTotals.manualDiscount,
+        couponDiscount: advTotals.couponDiscount,
+        coupon_discount_amount: advTotals.couponDiscount,
+        coupon_code: advTotals.couponDiscount > 0 ? selectedAdvance.coupon_code || null : null,
         gstPercentage: advTotals.gstPercent,
         gst_percentage: advTotals.gstPercent,
         gstAmount: advTotals.gstAmount,
@@ -1569,9 +1615,13 @@ export default function POSBilling() {
         changeReturned: 0,
         amount_paid: finalGrandTotal,
         balance_due: 0,
-        paymentMode: receivePaymentMode,
-        payment_mode: receivePaymentMode,
-        payment_method: receivePaymentMode,
+        splitCash: finalSplitCash,
+        splitGpay: finalSplitGpay,
+        split_cash: finalSplitCash,
+        split_gpay: finalSplitGpay,
+        paymentMode: finalPaymentMode,
+        payment_mode: finalPaymentMode,
+        payment_method: finalPaymentMode,
         date: nowIso,
         bill_date: nowIso,
         createdAt: nowIso,
@@ -1675,7 +1725,7 @@ export default function POSBilling() {
       items: itemsToSave,
       discountType: discountType === "percent" ? "PERCENT" : "FIXED",
       discountValue: Number(discountValue) || 0,
-      couponDiscount: appliedCoupon ? Number(appliedCoupon.discountAmount) || 0 : 0,
+      couponDiscount: liveCouponDiscount,
       isGst: applyGST,
       gstPercentage: applyGST ? Number(gstPercentage) || 0 : 0,
       taxMode,
@@ -1768,6 +1818,8 @@ export default function POSBilling() {
         discountType: discountType === "percent" ? "PERCENT" : "FIXED",
         discountValue: discountValue,
         discountAmount: localCalculatedDiscount,
+        couponCode: appliedCoupon && localTotals.couponDiscount > 0 ? appliedCoupon.code : null,
+        couponDiscount: localTotals.couponDiscount,
         gstPercentage: applyGST ? gstPercentage : 0,
         gstAmount: localGstAmount,
         deliveryFee: deliveryFee,
@@ -1808,6 +1860,10 @@ export default function POSBilling() {
         discount_amount: Number(localCalculatedDiscount) || 0,
         discountType: discountType === "percent" ? "PERCENT" : "FIXED",
         discountValue: discountValue ? Number(discountValue) : undefined,
+        manualDiscount: localTotals.manualDiscount,
+        couponDiscount: localTotals.couponDiscount,
+        coupon_discount_amount: localTotals.couponDiscount,
+        coupon_code: appliedCoupon && localTotals.couponDiscount > 0 ? appliedCoupon.code : null,
         gstPercentage: applyGST ? Number(gstPercentage) : 0,
         gst_percentage: applyGST ? Number(gstPercentage) : 0,
         gstAmount: Number(localGstAmount) || 0,
@@ -1823,6 +1879,8 @@ export default function POSBilling() {
         balance_due: paymentMode === "CREDIT" ? Number(localGrandTotal) || 0 : 0,
         splitCash: splitCashVal,
         splitGpay: splitGpayVal,
+        split_cash: splitCashVal,
+        split_gpay: splitGpayVal,
         paymentMode: paymentMode,
         payment_mode: paymentMode,
         payment_method: paymentMode === "CREDIT" ? "CREDIT" : paymentMode,
@@ -1862,6 +1920,7 @@ export default function POSBilling() {
       setPaymentMode("CASH");
       setApplyGST(false);
       setGstPercentage(18);
+      handleRemoveCoupon();
 
       return mappedOrder;
     } catch (err: any) {
@@ -4446,7 +4505,7 @@ export default function POSBilling() {
                           <div className="flex items-center justify-between p-2 rounded-lg bg-[#FFF0F8] border border-[#F500A0]/30 text-xs">
                             <span className="font-bold text-[#F500A0]">{appliedCoupon.code} ({appliedCoupon.percentage}% off)</span>
                             <div className="flex items-center gap-2">
-                              <span className="font-black text-[#111111]">-₹{appliedCoupon.discountAmount.toFixed(2)}</span>
+                              <span className="font-black text-[#111111]">-₹{couponDiscount.toFixed(2)}</span>
                               <button
                                 type="button"
                                 onClick={handleRemoveCoupon}
@@ -4512,7 +4571,7 @@ export default function POSBilling() {
                           <div className="flex justify-between items-center text-xs font-semibold text-[#F500A0]">
                             <span>Coupon Discount ({appliedCoupon.code})</span>
                             <span className="font-bold font-mono">
-                              -₹{appliedCoupon.discountAmount.toFixed(2)}
+                              -₹{couponDiscount.toFixed(2)}
                             </span>
                           </div>
                         )}
@@ -4846,8 +4905,8 @@ export default function POSBilling() {
                         )}
                       </button>
 
-                      {/* Save as Advance Order — conditionally hidden when CREDIT financial option is selected */}
-                      {paymentMode !== "CREDIT" && (
+                      {/* Save as Advance Order — hidden for CREDIT and SPLIT payment modes */}
+                      {paymentMode !== "CREDIT" && paymentMode !== "SPLIT" && (
                         <button
                           onClick={openAdvanceSaveModal}
                           disabled={isSubmittingOrder}
@@ -5061,7 +5120,43 @@ export default function POSBilling() {
                           >
                             GPAY
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => setReceivePaymentMode("SPLIT")}
+                            className={`col-span-2 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                              receivePaymentMode === "SPLIT"
+                                ? "bg-[#334E68] text-white shadow-xs"
+                                : "bg-white border border-slate-200 text-slate-700 hover:border-slate-400"
+                            }`}
+                          >
+                            SPLIT (CASH + GPAY)
+                          </button>
                         </div>
+                        {receivePaymentMode === "SPLIT" && (
+                          <div className="grid grid-cols-2 gap-2 mt-2">
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">Cash (₹)</label>
+                              <input
+                                type="number"
+                                value={receiveSplitCash || ""}
+                                onWheel={(e) => e.currentTarget.blur()}
+                                onChange={(e) =>
+                                  setReceiveSplitCash(
+                                    Math.min(finalAmountToCollect, Math.max(0, parseFloat(e.target.value) || 0)),
+                                  )
+                                }
+                                placeholder="0"
+                                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold text-black focus:outline-none focus:border-[#334E68]"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-1">GPay (₹)</label>
+                              <div className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-bold text-black">
+                                {Math.max(0, finalAmountToCollect - (Number(receiveSplitCash) || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* FINAL AMOUNT TO COLLECT */}

@@ -127,6 +127,7 @@ export async function submitOrder(payload: {
   splitGpay?: number;
   paymentMode: PaymentMode;
   couponCode?: string | null;
+  couponDiscount?: number;
   remarks?: string | null;
   referenceNumber?: string | null;
   creditDueDate?: string | null;
@@ -193,6 +194,8 @@ export async function createAdvanceOrder(payload: {
   totalAmount: number;
   depositAmount: number;
   depositPaymentMode: PaymentMode;
+  depositSplitCash?: number;
+  depositSplitGpay?: number;
   deliveryDate: string | null;
   notes: string | null;
   isGst?: boolean;
@@ -201,6 +204,8 @@ export async function createAdvanceOrder(payload: {
   discountAmount?: number;
   discountType?: 'PERCENT' | 'FIXED';
   discountValue?: number;
+  couponCode?: string | null;
+  couponDiscount?: number;
   deliveryFee?: number;
   items: {
     product_id: string | null;
@@ -242,8 +247,12 @@ export async function finalizeAdvanceOrder(payload: {
   discountType: 'PERCENT' | 'FIXED';
   discountValue: number;
   discountAmount: number;
+  couponCode?: string | null;
+  couponDiscount?: number;
   deliveryFee: number;
   paymentMode: PaymentMode;
+  splitCash?: number;
+  splitGpay?: number;
   billDate: string;
 }): Promise<{ orderId: string }> {
   return await dbStore.finalizeAdvanceOrder(payload);

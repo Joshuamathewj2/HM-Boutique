@@ -97,40 +97,47 @@ export default function InvoiceModal({
     <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-[400] flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-150">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[92vh] sm:h-[88vh] flex flex-col overflow-hidden border border-neutral-300 transform scale-100 animate-in zoom-in-95 duration-150">
         {/* Header Bar — Streamlined Single-Action Layout */}
-        <div className="px-4 py-3 flex justify-between items-center bg-neutral-900 text-white border-b border-neutral-800 shrink-0">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#F500A0]" />
-            <h3 className="font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 text-white">
-              <span>Invoice Preview</span>
-              <span className="text-neutral-400 font-mono">#{orderId}</span>
+        <div className="px-3 sm:px-4 py-2.5 sm:py-3 flex justify-between items-center gap-2 bg-neutral-900 text-white border-b border-neutral-800 shrink-0">
+          {/* Title: stacks "Invoice" over the number on phones, single line from sm up */}
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <span className="w-2.5 h-2.5 shrink-0 rounded-full bg-[#F500A0]" />
+            <h3 className="min-w-0 font-bold text-xs uppercase tracking-wider flex flex-col sm:flex-row sm:items-center sm:gap-1.5 leading-tight text-white">
+              <span className="whitespace-nowrap">
+                Invoice<span className="hidden sm:inline"> Preview</span>
+              </span>
+              <span className="text-neutral-400 font-mono text-[10px] sm:text-xs truncate">#{orderId}</span>
             </h3>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <button
               type="button"
               onClick={handlePrint}
               disabled={!normalizedOrder}
-              className="flex items-center gap-1.5 text-xs font-bold text-white px-3 py-1.5 bg-[#F500A0] hover:bg-[#D8008D] rounded-lg transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+              className="flex items-center gap-1.5 text-xs font-bold text-white px-2.5 sm:px-3 h-8 bg-[#F500A0] hover:bg-[#D8008D] rounded-lg transition-colors cursor-pointer shadow-xs disabled:opacity-50 whitespace-nowrap"
             >
               <Printer className="w-4 h-4" />
-              <span>Print Invoice</span>
+              <span className="sm:hidden">Print</span>
+              <span className="hidden sm:inline">Print Invoice</span>
             </button>
 
             <a
               href={`/invoice/${orderId}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs font-semibold text-neutral-300 hover:text-white px-2.5 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition-colors flex items-center gap-1"
+              aria-label="Open full page"
+              title="Open full page"
+              className="text-xs font-semibold text-neutral-300 hover:text-white px-2 sm:px-2.5 h-8 bg-white/10 hover:bg-white/20 rounded-lg transition-colors flex items-center gap-1 whitespace-nowrap"
             >
-              <span>Full Page</span>
-              <ExternalLink className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Full Page</span>
+              <ExternalLink className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
             </a>
 
             <button
               type="button"
               onClick={onClose}
-              className="w-7 h-7 flex items-center justify-center bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors cursor-pointer"
+              aria-label="Close"
+              className="w-8 h-8 flex items-center justify-center bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>

@@ -105,6 +105,14 @@ export default function PrintableReceipt({ order, paper, size }: PrintableReceip
     hour: "2-digit",
     minute: "2-digit",
   });
+  // Cash / GPay breakdown for split payments (fields come either camelCase from the
+  // billing panel or snake_case from the database)
+  const paymentModeUpper = String(order.payment_mode || order.payment_method || "CASH").toUpperCase();
+  const splitCash = Number((order as any).split_cash ?? (order as any).splitCash ?? 0) || 0;
+  const splitGpay = Number((order as any).split_gpay ?? (order as any).splitGpay ?? 0) || 0;
+  const showSplit = paymentModeUpper === "SPLIT" && (splitCash > 0 || splitGpay > 0);
+  const couponCode = (order as any).coupon_code || (order as any).couponCode || null;
+
   const paymentLabel = isCredit
     ? isSettled
       ? "CREDIT SETTLED"
@@ -113,11 +121,11 @@ export default function PrintableReceipt({ order, paper, size }: PrintableReceip
       ? isSettled
         ? "ADVANCE SETTLED"
         : "ADVANCE RECEIVED"
-      : order.payment_method === "UPI" || order.payment_mode === "UPI"
+      : ["UPI", "GPAY"].includes(paymentModeUpper)
         ? "PAID BY UPI / GPAY"
         : order.payment_method === "CARD" || order.payment_mode === "CARD"
           ? "PAID BY CARD"
-          : order.payment_method === "SPLIT" || order.payment_mode === "SPLIT"
+          : paymentModeUpper === "SPLIT"
             ? "SPLIT PAYMENT"
             : "PAID BY CASH";
 
@@ -249,7 +257,7 @@ export default function PrintableReceipt({ order, paper, size }: PrintableReceip
           )}
           {totals.couponDiscount > 0 && (
             <div className="flex justify-between">
-              <span>Coupon Discount:</span>
+              <span>Coupon Discount{couponCode ? ` (${couponCode})` : ""}:</span>
               <span className="tabular-nums">-₹{totals.couponDiscount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
             </div>
           )}
@@ -307,6 +315,18 @@ export default function PrintableReceipt({ order, paper, size }: PrintableReceip
 
         <div className="text-[10px] space-y-1 mb-2">
           <p className="font-semibold text-center border-b border-dashed border-black/30 pb-1 mb-1">{paymentLabel}</p>
+          {showSplit && (
+            <div className="text-[11px] space-y-0.5 border-b border-dashed border-black/30 pb-1 mb-1">
+              <div className="flex justify-between">
+                <span>Paid by Cash:</span>
+                <span className="tabular-nums">₹{splitCash.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Paid by GPay:</span>
+                <span className="tabular-nums">₹{splitGpay.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+              </div>
+            </div>
+          )}
           <p className="text-[9px] uppercase tracking-wider text-center text-black leading-snug">{numberToWords(totals.grandTotal)}</p>
         </div>
 
@@ -380,7 +400,7 @@ export default function PrintableReceipt({ order, paper, size }: PrintableReceip
           </p>
           <p className="text-xs text-zinc-500 mt-0.5">{formattedDate}</p>
           <p className="text-xs text-zinc-500 mt-0.5 uppercase">
-            Mode: {order.payment_mode || "CASH"}
+            Mode: {showSplit ? "Split (Cash + GPay)" : order.payment_mode || "CASH"}
           </p>
         </div>
       </div>
@@ -528,6 +548,23 @@ export default function PrintableReceipt({ order, paper, size }: PrintableReceip
             </div>
           )}
 
+          {/* Split payment breakdown */}
+          {showSplit && (
+            <div className="text-xs space-y-1.5 pt-2 border-t border-zinc-100">
+              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                PAYMENT SPLIT
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-600 font-medium">Paid by Cash</span>
+                <span className="font-bold text-slate-900 font-mono tabular-nums">₹{formatINR(splitCash)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-600 font-medium">Paid by GPay</span>
+                <span className="font-bold text-slate-900 font-mono tabular-nums">₹{formatINR(splitGpay)}</span>
+              </div>
+            </div>
+          )}
+
           {/* Terms & Notes */}
           <div className="text-[11px] text-slate-500 leading-relaxed pt-2 space-y-0.5 border-t border-zinc-100">
             <p className="font-semibold text-slate-700 mb-0.5">Terms &amp; Notes:</p>
@@ -538,7 +575,7 @@ export default function PrintableReceipt({ order, paper, size }: PrintableReceip
         </div>
 
         {/* Right Side: Financial Lines & Grand Total Block */}
-        <InvoiceTotalsBlock totals={totals} />
+        <InvoiceTotalsBlock totals={totals} couponCode={couponCode} />
       </div>
 
       {/* Footer */}

@@ -38,6 +38,28 @@ const keyFilter = (id: string, col: string = 'invoice_no'): string => {
   return isUuid(cleanId) ? `id.eq.${cleanId},${col}.eq.${cleanId}` : `${col}.eq.${cleanId}`;
 };
 
+// orders.discount_amount stores manual + coupon combined; the coupon part is the
+// remainder over manual_discount_amount (only meaningful when coupon_code is set).
+const couponDiscountOf = (row: any): number => {
+  if (!row?.coupon_code) return 0;
+  const combined = Number(row.discount_amount ?? row.discount ?? 0);
+  const manual = Number(row.manual_discount_amount ?? 0);
+  return Math.max(0, Math.round((combined - manual) * 100) / 100);
+};
+
+// Best-effort usage counter bump for an applied coupon (non-fatal).
+const bumpCouponUsage = async (code?: string | null): Promise<void> => {
+  if (!code || !isSupabaseConfigured) return;
+  try {
+    const { data } = await supabase.from('coupons').select('id, usage_count').ilike('code', code).maybeSingle();
+    if (data?.id) {
+      await supabase.from('coupons').update({ usage_count: Number(data.usage_count || 0) + 1 }).eq('id', data.id);
+    }
+  } catch {
+    // non-fatal
+  }
+};
+
 const mapStatus = (rawStatus: any): AdvanceOrderStatus => {
   const s = String(rawStatus || '').toLowerCase();
   if (s === 'completed' || s === 'paid') return 'COMPLETED';
@@ -746,7 +768,7 @@ export const dbStore = {
             const gstPercentage = Number(
               o.gst_percentage ||
               o.gst_rate ||
-              (gstAmount > 0 && subtotal > 0 ? Math.round((gstAmount / subtotal) * 100) : (isGst ? 18 : 0))
+              (gstAmount > 0 && total - gstAmount > 0 ? Math.round((gstAmount / (total - gstAmount - Number(o.delivery_charge || o.delivery_fee || 0))) * 100) : (isGst ? 18 : 0))
             );
 
             return {
@@ -762,16 +784,17 @@ export const dbStore = {
               is_gst: isGst,
               subtotal,
               discount_type: 'FIXED',
-              discount_value: discount,
+              discount_value: Math.max(0, discount - couponDiscountOf(o)),
               discount_amount: discount,
+              coupon_discount_amount: couponDiscountOf(o),
               gst_percentage: gstPercentage,
               gst_amount: gstAmount,
               delivery_fee: Number(o.delivery_charge || o.delivery_fee || 0),
               grand_total: total,
               total,
               cash_received: Number(o.cash_received || total),
-              split_cash: Number(o.split_cash || 0),
-              split_gpay: Number(o.split_gpay || 0),
+              split_cash: Number(o.split_cash || o.split_details?.cash || 0),
+              split_gpay: Number(o.split_gpay || o.split_details?.gpay || 0),
               payment_mode: (String(o.payment_mode || o.payment_method || 'CASH').toUpperCase()) as PaymentMode,
               bill_date: o.created_at || new Date().toISOString(),
               created_at: o.created_at || new Date().toISOString(),
@@ -991,7 +1014,7 @@ export const dbStore = {
           const gstPercentage = Number(
             row.gst_percentage ||
             row.gst_rate ||
-            (gstAmount > 0 && subtotal > 0 ? Math.round((gstAmount / subtotal) * 100) : (isGst ? 18 : 0))
+            (gstAmount > 0 && total - gstAmount > 0 ? Math.round((gstAmount / (total - gstAmount - Number(row.delivery_charge || row.delivery_fee || 0))) * 100) : (isGst ? 18 : 0))
           );
 
           return {
@@ -1005,8 +1028,9 @@ export const dbStore = {
             is_gst: isGst,
             subtotal,
             discount_type: 'FIXED',
-            discount_value: discount,
+            discount_value: Math.max(0, discount - couponDiscountOf(row)),
             discount_amount: discount,
+            coupon_discount_amount: couponDiscountOf(row),
             gst_percentage: gstPercentage,
             gst_amount: gstAmount,
             delivery_fee: Number(row.delivery_charge || row.delivery_fee || 0),
@@ -1137,6 +1161,7 @@ export const dbStore = {
     splitGpay?: number;
     paymentMode: PaymentMode;
     couponCode?: string | null;
+    couponDiscount?: number;
     remarks?: string | null;
     referenceNumber?: string | null;
     creditDueDate?: string | null;
@@ -1182,7 +1207,7 @@ export const dbStore = {
           subtotal: baseSubtotal,
           total: payload.grandTotal,
           discount_amount: payload.discountAmount,
-          manual_discount_amount: 0,
+          manual_discount_amount: Math.max(0, payload.discountAmount - (Number(payload.couponDiscount) || 0)),
           manual_discount_type: payload.discountType === 'PERCENT' ? 'percent' : 'flat',
           manual_discount_value: payload.discountValue || 0,
           gst_enabled: isGst,
@@ -1254,6 +1279,9 @@ export const dbStore = {
           } catch {
             // non-fatal
           }
+
+          // Advance finalizations carry a referenceNumber; their coupon was counted when the advance was booked
+          if (!payload.referenceNumber) await bumpCouponUsage(payload.couponCode);
 
           // Atomically decrement stock if product_id exists
           for (const item of payload.items) {
@@ -1679,7 +1707,7 @@ export const dbStore = {
             const gstPercentage = Number(
               matchedOrd?.gst_percentage ||
               matchedOrd?.gst_rate ||
-              (gstAmount > 0 && subtotal > 0 ? Math.round((gstAmount / subtotal) * 100) : (isGst ? 18 : 0))
+              (gstAmount > 0 && totalAmt - gstAmount > 0 ? Math.round((gstAmount / (totalAmt - gstAmount - Number(matchedOrd?.delivery_charge || matchedOrd?.delivery_fee || 0))) * 100) : (isGst ? 18 : 0))
             );
             const discountAmount = Number(matchedOrd?.discount_amount ?? matchedOrd?.manual_discount_amount ?? 0);
             const discountValue = Number(matchedOrd?.manual_discount_value || matchedOrd?.discount_value || 0);
@@ -1700,6 +1728,10 @@ export const dbStore = {
               grand_total: totalAmt,
               deposit_amount: depAmt,
               deposit_payment_mode: (String(matchedOrd?.payment_mode || 'CASH').toUpperCase()) as PaymentMode,
+              coupon_code: matchedOrd?.coupon_code || null,
+              coupon_discount_amount: couponDiscountOf(matchedOrd),
+              deposit_split_cash: Number(matchedOrd?.split_details?.cash || 0),
+              deposit_split_gpay: Number(matchedOrd?.split_details?.gpay || 0),
               delivery_date: a.expected_delivery_date || a.delivery_date || matchedOrd?.delivery_date || null,
               notes: a.remarks || a.notes || a.description || matchedOrd?.notes || null,
               finalized_order_id: matchedOrd?.reference_number || a.invoice_number || a.completed_order_id || null,
@@ -1765,7 +1797,7 @@ export const dbStore = {
         const gstPercentage = Number(
           o.gst_percentage ||
           o.gst_rate ||
-          (gstAmount > 0 && subtotal > 0 ? Math.round((gstAmount / subtotal) * 100) : (isGst ? 18 : 0))
+          (gstAmount > 0 && totalAmt - gstAmount > 0 ? Math.round((gstAmount / (totalAmt - gstAmount - Number(o.delivery_charge || o.delivery_fee || 0))) * 100) : (isGst ? 18 : 0))
         );
         const discountAmount = Number(o.discount_amount ?? o.manual_discount_amount ?? 0);
         const discountValue = Number(o.manual_discount_value || o.discount_value || 0);
@@ -1785,6 +1817,10 @@ export const dbStore = {
           grand_total: totalAmt,
           deposit_amount: depAmt,
           deposit_payment_mode: (String(o.payment_mode || 'CASH').toUpperCase()) as PaymentMode,
+              coupon_code: o.coupon_code || null,
+              coupon_discount_amount: couponDiscountOf(o),
+              deposit_split_cash: Number(o.split_details?.cash || 0),
+              deposit_split_gpay: Number(o.split_details?.gpay || 0),
           delivery_date: o.delivery_date || o.expected_delivery_date || null,
           notes: o.notes || o.remarks || null,
           finalized_order_id: null,
@@ -1893,7 +1929,7 @@ export const dbStore = {
           const gstPercentage = Number(
             ord.gst_percentage ||
             ord.gst_rate ||
-            (gstAmount > 0 && subtotal > 0 ? Math.round((gstAmount / subtotal) * 100) : (isGst ? 18 : 0))
+            (gstAmount > 0 && totalAmt - gstAmount > 0 ? Math.round((gstAmount / (totalAmt - gstAmount - Number(ord.delivery_charge || ord.delivery_fee || 0))) * 100) : (isGst ? 18 : 0))
           );
 
           return {
@@ -1909,6 +1945,10 @@ export const dbStore = {
             grand_total: totalAmt,
             deposit_amount: depAmt,
             deposit_payment_mode: (String(ord.payment_mode || 'CASH').toUpperCase()) as PaymentMode,
+              coupon_code: ord.coupon_code || null,
+              coupon_discount_amount: couponDiscountOf(ord),
+              deposit_split_cash: Number(ord.split_details?.cash || 0),
+              deposit_split_gpay: Number(ord.split_details?.gpay || 0),
             delivery_date: ord.delivery_date || ord.expected_delivery_date || null,
             notes: ord.notes || null,
             finalized_order_id: null,
@@ -1954,6 +1994,8 @@ export const dbStore = {
     totalAmount: number;
     depositAmount: number;
     depositPaymentMode: PaymentMode;
+    depositSplitCash?: number;
+    depositSplitGpay?: number;
     deliveryDate: string | null;
     notes: string | null;
     isGst?: boolean;
@@ -1962,6 +2004,8 @@ export const dbStore = {
     discountAmount?: number;
     discountType?: 'PERCENT' | 'FIXED';
     discountValue?: number;
+    couponCode?: string | null;
+    couponDiscount?: number;
     deliveryFee?: number;
     items: {
       product_id: string | null;
@@ -2029,7 +2073,8 @@ export const dbStore = {
             subtotal: payload.subtotal,
             total: payload.totalAmount,
             discount_amount: payload.discountAmount || 0,
-            manual_discount_amount: 0,
+            manual_discount_amount: Math.max(0, (payload.discountAmount || 0) - (Number(payload.couponDiscount) || 0)),
+            coupon_code: payload.couponCode || null,
             manual_discount_type: payload.discountType === 'PERCENT' ? 'percent' : 'flat',
             manual_discount_value: payload.discountValue || 0,
             gst_enabled: isGst,
@@ -2039,6 +2084,9 @@ export const dbStore = {
             payment_mode: payload.depositPaymentMode,
             payment_method: payload.depositPaymentMode.toLowerCase(),
             cash_received: payload.depositAmount,
+            split_details: payload.depositPaymentMode === 'SPLIT'
+              ? { cash: Number(payload.depositSplitCash) || 0, gpay: Number(payload.depositSplitGpay) || 0 }
+              : {},
             notes: payload.notes || null,
             items: structuredItems,
             created_at: new Date().toISOString(),
@@ -2052,6 +2100,8 @@ export const dbStore = {
           }
           if (ordErr) {
             console.warn('Supabase orders dual-insert for advance order:', ordErr.message);
+          } else {
+            await bumpCouponUsage(payload.couponCode);
           }
         } catch (dualErr) {
           console.warn('Supabase orders dual-insert error:', dualErr);
@@ -2282,8 +2332,12 @@ export const dbStore = {
     discountType: 'PERCENT' | 'FIXED';
     discountValue: number;
     discountAmount: number;
+    couponCode?: string | null;
+    couponDiscount?: number;
     deliveryFee: number;
     paymentMode: PaymentMode;
+    splitCash?: number;
+    splitGpay?: number;
     billDate: string;
   }): Promise<{ orderId: string }> {
     // Idempotency check: if an order with this reference number or invoiceId already exists, do not duplicate
@@ -2321,6 +2375,7 @@ export const dbStore = {
       discount_amount: payload.discountAmount,
       discount_type: payload.discountType,
       discount_value: payload.discountValue,
+      coupon_discount_amount: payload.couponDiscount || 0,
       is_gst: payload.isGst,
       gst_percentage: payload.gstPercentage,
       delivery_fee: payload.deliveryFee,
@@ -2343,7 +2398,11 @@ export const dbStore = {
       deliveryFee: orderTotals.deliveryFee,
       grandTotal: orderTotals.total,
       cashReceived: orderTotals.total,
+      splitCash: payload.splitCash,
+      splitGpay: payload.splitGpay,
       paymentMode: payload.paymentMode,
+      couponCode: payload.couponCode || null,
+      couponDiscount: orderTotals.couponDiscount,
       referenceNumber: payload.advanceOrderId,
       remarks: `Advance order hold completed: #${payload.advanceOrderId}`,
     });

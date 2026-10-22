@@ -67,6 +67,7 @@ export type OrderRow = {
   payment_method?: string;
   due_date?: string | null;
   coupon_code?: string | null;
+  coupon_discount_amount?: number; // coupon share of discount_amount
   remarks?: string | null;
   reference_number?: string | null;
   is_credit?: boolean;
@@ -128,6 +129,10 @@ export type AdvanceOrderRow = {
   discount_amount?: number;
   discount_type?: string;
   discount_value?: number;
+  coupon_code?: string | null;
+  coupon_discount_amount?: number;
+  deposit_split_cash?: number; // cash portion of the deposit when deposit_payment_mode = SPLIT
+  deposit_split_gpay?: number; // gpay portion of the deposit when deposit_payment_mode = SPLIT
   delivery_fee?: number;
   amount_paid?: number;
   balance_due?: number;

@@ -176,15 +176,21 @@ export function calculateBillTotals(input: BillCalculationInput | any): BillTota
     (isPercent ? (input.discount_percent ?? input.discountPercent ?? 0) : 0)
   );
 
-  // Coupon discount
-  const couponDiscount = Math.round(
-    Number(
-      input.couponDiscount ??
-      input.coupon_discount_amount ??
-      input.coupon_discount ??
-      0
-    ) * 100
-  ) / 100;
+  // Coupon discount. Raw DB rows don't carry a coupon amount column, so for rows with a
+  // coupon_code it is derived as discount_amount (combined) - manual_discount_amount.
+  let rawCoupon = input.couponDiscount ?? input.coupon_discount_amount ?? input.coupon_discount;
+  if (
+    (rawCoupon === undefined || rawCoupon === null) &&
+    (input.coupon_code || input.couponCode) &&
+    input.manual_discount_amount !== undefined &&
+    input.manual_discount_amount !== null
+  ) {
+    rawCoupon = Math.max(
+      0,
+      Number(input.discount_amount ?? input.discount ?? 0) - Number(input.manual_discount_amount || 0)
+    );
+  }
+  const couponDiscount = Math.round(Number(rawCoupon ?? 0) * 100) / 100;
 
   // Manual discount: computed from percentage or fixed amount
   let manualDiscount = 0;
@@ -194,22 +200,19 @@ export function calculateBillTotals(input: BillCalculationInput | any): BillTota
     manualDiscount = Math.round(((subtotal * Math.max(0, discountValue)) / 100) * 100) / 100;
   } else {
     // Fixed amount: check manual_discount_value, manual_discount_amount, or discount_amount
-    const rawFixed = Number(
-      discountValue > 0
-        ? discountValue
-        : (input.manual_discount_value && input.manual_discount_value > 0
-            ? input.manual_discount_value
-            : (input.manual_discount_amount && input.manual_discount_amount > 0
-                ? input.manual_discount_amount
-                : (input.discount_amount ?? input.discountAmount ?? input.discount ?? 0)))
-    );
-    manualDiscount = Math.round(Math.max(0, rawFixed) * 100) / 100;
-    // If discount was read from an already-combined discount_amount and couponDiscount was provided separately, avoid double counting
-    if (couponDiscount > 0 && manualDiscount > couponDiscount && (input.discount_amount || input.discount)) {
-      if (manualDiscount === Number(input.discount_amount || input.discount)) {
-        manualDiscount = Math.max(0, manualDiscount - couponDiscount);
-      }
+    let rawFixed: number;
+    if (discountValue > 0) {
+      rawFixed = discountValue;
+    } else if (input.manual_discount_value && input.manual_discount_value > 0) {
+      rawFixed = Number(input.manual_discount_value);
+    } else if (input.manual_discount_amount && input.manual_discount_amount > 0) {
+      rawFixed = Number(input.manual_discount_amount);
+    } else {
+      // discount_amount is the combined (manual + coupon) figure — strip the coupon part to avoid double counting
+      const combined = Number(input.discount_amount ?? input.discountAmount ?? input.discount ?? 0);
+      rawFixed = combined - couponDiscount;
     }
+    manualDiscount = Math.round(Math.max(0, rawFixed) * 100) / 100;
   }
 
   manualDiscount = Math.min(subtotal, Math.max(0, manualDiscount));

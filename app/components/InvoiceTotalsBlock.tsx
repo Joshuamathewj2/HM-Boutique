@@ -5,6 +5,7 @@ import type { OrderTotals } from "@/lib/orderTotals";
 
 export interface InvoiceTotalsBlockProps {
   totals: OrderTotals;
+  couponCode?: string | null;
   className?: string;
 }
 
@@ -16,6 +17,7 @@ const formatINR = (val: number): string =>
 
 export default function InvoiceTotalsBlock({
   totals,
+  couponCode,
   className = "",
 }: InvoiceTotalsBlockProps) {
   const manualDiscountLabel =
@@ -46,7 +48,7 @@ export default function InvoiceTotalsBlock({
       {/* Coupon Discount (if > 0) */}
       {totals.couponDiscount > 0 && (
         <div className="flex justify-between items-center text-[#F500A0]">
-          <span className="font-medium">Coupon Discount</span>
+          <span className="font-medium">Coupon Discount{couponCode ? ` (${couponCode})` : ""}</span>
           <span className="font-mono font-medium tabular-nums whitespace-nowrap">
             -₹{formatINR(totals.couponDiscount)}
           </span>
